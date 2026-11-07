@@ -1,0 +1,20 @@
+{
+ "pages": [
+  {
+   "index": 0,
+   "markdown": "Musterfirma GmbH · Musterstraße 1 · 12345 Musterstadt\n\nErika Muster\nBeispielweg 2\n12345 Musterstadt\n\n# Rechnung Nr. RE-2026-0815\n\nRechnungsdatum: 02.11.2026\n\n| Pos | Leistung | Betrag |\n|---|---|---|\n| 1 | Wartung Heizungsanlage | 1.000,00 € |\n| | USt. 19 % | 190,00 € |\n| | **Gesamt** | **1.190,00 €** |\n\nBitte überweisen Sie den Betrag bis zum 20.11.2026 auf DE89 3704 0044 0532 0130 00, Verwendungszweck RE-2026-0815.",
+   "images": [],
+   "dimensions": {
+    "dpi": 200,
+    "height": 2339,
+    "width": 1654
+   }
+  }
+ ],
+ "model": "mistral-ocr-2505-completion",
+ "document_annotation": "{\"art\": \"rechnung\", \"betreff\": \"Rechnung Nr. RE-2026-0815\", \"absender\": \"Musterfirma GmbH\", \"datum\": \"2026-11-02\", \"aktenzeichen\": \"RE-2026-0815\", \"handlung\": \"zahlen\", \"fristen\": [{\"art\": \"zahlung\", \"datum\": \"2026-11-20\", \"betrag\": 1190.0, \"sicher\": true, \"text\": \"Bitte überweisen Sie den Betrag bis zum 20.11.2026\"}], \"betrag\": 1190.0, \"iban\": \"DE89 3704 0044 0532 0130 00\", \"verwendungszweck\": \"RE-2026-0815\", \"ist_beleg\": true, \"vertraulich\": false}",
+ "usage_info": {
+  "pages_processed": 1,
+  "doc_size_bytes": 48213
+ }
+}

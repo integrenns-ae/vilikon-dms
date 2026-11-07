@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import ftplib
 import hashlib
 import io
 import json
@@ -22,10 +23,25 @@ from app.intake import sftp_ftp
 
 TOKEN = "test-token-123"
 FIXTURES = Path(__file__).parent / "fixtures" / "mistral"
+SFTP_SOURCE = {
+    "id": "scanner",
+    "kind": "sftp",
+    "host": "nas.example.com",
+    "port": 22,
+    "user": "scan",
+    "password": "secret-sftp",
+    "folder": "/post",
+}
+ENV = ("DATA_DIR", "DMS_TOKEN", "MISTRAL_API_KEY", "DMS_INTERVAL_MIN", "DMS_PAGES_PER_MONTH", "DMS_LANGUAGE")
 
 
 def recorded(name: str) -> dict:
     return json.loads((FIXTURES / f"{name}.json").read_text())
+
+
+def with_annotation(answer: dict, **changes) -> dict:
+    """A recorded answer with some annotation fields changed."""
+    return answer | {"document_annotation": json.dumps(json.loads(answer["document_annotation"]) | changes)}
 
 
 def letter(seed: int, pages: int = 1) -> bytes:
@@ -120,23 +136,17 @@ class FakeFtp:
         return self.root / path.lstrip("/")
 
     def mlsd(self, path: str, facts=()):
-        import ftplib
-
         p = self._p(path)
         if not p.is_dir():
             raise ftplib.error_perm("550 no such directory")
         for f in sorted(p.iterdir()):
-            yield (
-                f.name,
-                {"type": "dir" if f.is_dir() else "file", "size": str(f.stat().st_size), "modify": "20261102101200"},
-            )
+            kind = "dir" if f.is_dir() else "file"
+            yield f.name, {"type": kind, "size": str(f.stat().st_size), "modify": "20261102101200"}
 
     def retrbinary(self, cmd: str, callback) -> None:
         callback(self._p(cmd.removeprefix("RETR ")).read_bytes())
 
     def mkd(self, path: str) -> None:
-        import ftplib
-
         if self._p(path).exists():
             raise ftplib.error_perm("550 exists")
         self._p(path).mkdir()
@@ -155,14 +165,14 @@ class FakeCockpit:
     """Calls the DMS the way the core does (backend/app/product_modules.py, module.py, knowledge_sources.py)."""
 
     _NAME = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
-    _PFAD = re.compile(r"^ki(/[A-Za-z0-9_\-][A-Za-z0-9_.\-]*|/\{[a-z_][a-z0-9_]*\})*/?$")
+    _PATH = re.compile(r"^ki(/[A-Za-z0-9_\-][A-Za-z0-9_.\-]*|/\{[a-z_][a-z0-9_]*\})*/?$")
 
     def __init__(self, client: TestClient, token: str = TOKEN) -> None:
         self.client = client
         self.token = token
         self.seen_events: list[str] = []
         self.last_poll: str | None = None
-        self.memory: dict[str, dict] = {}  # file id → {"version", "text", "sensibel", "meta"}
+        self.memory: dict[str, dict] = {}  # file id → {"version", "text", "sensibel", "meta", "pfad"}
 
     def headers(self, who: str = "cockpit") -> dict:
         return {
@@ -176,10 +186,10 @@ class FakeCockpit:
         return self.client.get("/" + path, params=params or None, headers=self.headers(who))
 
     def push_sources(self, sources: list[dict], **extra):
-        return self.client.put("/ki/quellen", json={"quellen": sources, **extra}, headers=self.headers())
+        return self.client.put("/ki/sources", json={"sources": sources, **extra}, headers=self.headers())
 
     def sync_now(self) -> dict:
-        r = self.client.post("/ki/abgleich", headers=self.headers())
+        r = self.client.post("/ki/sync", headers=self.headers())
         assert r.status_code == 200, r.text
         return r.json()
 
@@ -223,26 +233,27 @@ class FakeCockpit:
         assert modul["standard"] == "vilikon.modul/1" and self._NAME.match(modul["schluessel"])
         rights = {r["key"] for r in modul["rechte"]}
         for f in modul["funktionen"]:
-            assert self._NAME.match(f["name"]) and f["recht"] in rights and self._PFAD.match(f["pfad"]), f
+            assert self._NAME.match(f["name"]) and f["recht"] in rights and self._PATH.match(f["pfad"]), f
             assert f["methode"] in ("GET", "POST", "PUT", "PATCH")
         for e in modul["ereignisse"]:
             assert self._NAME.match(e["art"]) and 0 < len(e["titel"]) <= 80 and len(e["beschreibung"]) <= 300, e
         assert len(modul["karten"]) <= 2
         for k in modul["karten"]:
-            assert self._PFAD.match(k["pfad"]) and "{" not in k["pfad"]
+            assert self._PATH.match(k["pfad"]) and "{" not in k["pfad"]
 
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
+    for k in ENV:
+        monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("DMS_TOKEN", TOKEN)
     monkeypatch.setenv("MISTRAL_API_KEY", "operator-key")
-    monkeypatch.setenv("DMS_INTERVALL_MIN", "0")
-    monkeypatch.setenv("DMS_SEITEN_MONAT", "300")
-    monkeypatch.delenv("DMS_SPRACHE", raising=False)
+    monkeypatch.setenv("DMS_INTERVAL_MIN", "0")
+    monkeypatch.setenv("DMS_PAGES_PER_MONTH", "300")
     config.reload()
     yield
-    for k in ("DATA_DIR", "DMS_TOKEN", "MISTRAL_API_KEY", "DMS_INTERVALL_MIN", "DMS_SEITEN_MONAT"):
+    for k in ENV:
         os.environ.pop(k, None)
     config.reload()
 
@@ -279,30 +290,18 @@ def scanner(tmp_path, monkeypatch, mistral):
     """The scanner's SFTP folder `/post` with the three invented letters, each with its recorded Mistral answer."""
     root = tmp_path / "sftp"
     (root / "post").mkdir(parents=True)
-    for i, name in enumerate(("rechnung", "bescheid", "werbung")):
-        (root / "post" / f"scan_{i + 1:03}.pdf").write_bytes(
-            mistral.answer(letter(i, 2 if name == "bescheid" else 1), recorded(name))
-        )
+    for i, name in enumerate(("invoice", "tax_notice", "advertising")):
+        data = letter(i, 2 if name == "tax_notice" else 1)
+        (root / "post" / f"scan_{i + 1:03}.pdf").write_bytes(mistral.answer(data, recorded(name)))
     (root / "post" / ".hidden.pdf").write_bytes(b"%PDF-1.4")
-    (root / "post" / "notiz.txt").write_text("not a letter")
+    (root / "post" / "note.txt").write_text("not a letter")
     clients: list[FakeSftp] = []
 
     def connect(source):
-        assert source["passwort"] == "geheim-sftp"
+        assert source["password"] == "secret-sftp"
         clients.append(FakeSftp(root))
         return clients[-1]
 
     monkeypatch.setitem(sftp_ftp.CONNECT, "sftp", connect)
     monkeypatch.setitem(sftp_ftp.CONNECT, "ftp", lambda source: FakeFtp(root))
     return SimpleNamespace(root=root, folder=root / "post", clients=clients)
-
-
-SFTP_SOURCE = {
-    "id": "scanner",
-    "art": "sftp",
-    "host": "nas.example.com",
-    "port": 22,
-    "user": "scan",
-    "passwort": "geheim-sftp",
-    "ordner": "/post",
-}

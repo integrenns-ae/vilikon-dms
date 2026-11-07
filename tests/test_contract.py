@@ -1,4 +1,4 @@
-"""The service token on every ki/ call, and what the DMS says about itself."""
+"""The service token on every ki/ call, what the DMS says about itself, and the page behind the cockpit's login."""
 
 import pytest
 from conftest import TOKEN
@@ -16,7 +16,7 @@ def _ki_routes():
                 yield method, path.replace("{doc_id}", "x")
 
 
-@pytest.mark.parametrize("auth", [None, "Bearer falsch", f"Token {TOKEN}", "Bearer "])
+@pytest.mark.parametrize("auth", [None, "Bearer wrong", f"Token {TOKEN}", "Bearer "])
 def test_every_ki_call_needs_the_token(client, auth):
     routes = list(_ki_routes())
     assert len(routes) >= 15
@@ -32,22 +32,23 @@ def test_without_a_configured_token_nothing_is_open(client, monkeypatch):
 
 
 def test_health_needs_no_token(client):
-    assert client.get("/gesund").json()["ok"] is True
+    assert client.get("/health").json()["ok"] is True
 
 
 def test_module_description_passes_the_cores_check(cockpit):
     modul = cockpit.get("ki/modul").json()
     cockpit.check_module(modul)
     assert modul["schluessel"] == "dms"
-    assert {f["name"] for f in modul["funktionen"]} >= {"dokument_suchen", "fristen", "beleg_daten"}
-    assert modul["anschluesse"][0]["standard"] == "vilikon.wissen/1"
+    assert modul["menue"] == {"titel": "Post", "symbol": "FileText"}
+    assert modul["anschluesse"] == [{"standard": "vilikon.wissen/1", "name": "Post", "intervall_min": 15}]
+    assert {f["name"] for f in modul["funktionen"]} >= {"search_documents", "due_dates", "receipt_data"}
     # every function path and every card answers (no 404 for a path the module announces)
     for f in modul["funktionen"]:
-        r = cockpit.get(f["pfad"].replace("{id}", "unbekannt"))
+        r = cockpit.get(f["pfad"].replace("{id}", "unknown"))
         assert r.status_code in (200, 404) and r.json() != {"fehler": "Diesen Pfad gibt es nicht."}, f["pfad"]
     for k in modul["karten"]:
         assert cockpit.get(k["pfad"]).status_code == 200
-    assert "dokument_suchen" in cockpit.get("ki/anleitung").text
+    assert "search_documents" in cockpit.get("ki/anleitung").text
 
 
 def test_module_in_english(cockpit, monkeypatch):
@@ -55,21 +56,21 @@ def test_module_in_english(cockpit, monkeypatch):
     modul = cockpit.get("ki/modul").json()
     cockpit.check_module(modul)
     assert modul["name"] == "Mail"
-    assert cockpit.get("ki/dokumente/x").json() == {"fehler": "This document does not exist."}
+    assert cockpit.get("ki/documents/x").json() == {"fehler": "This document does not exist."}
 
 
 def test_errors_are_plain_words(cockpit):
-    assert cockpit.get("ki/gibtsnicht").json() == {"fehler": "Diesen Pfad gibt es nicht."}
-    assert cockpit.client.put("/ki/quellen", content=b"{", headers=cockpit.headers()).status_code == 400
-    r = cockpit.push_sources([{"id": "Böse Id", "art": "sftp"}])
+    assert cockpit.get("ki/missing").json() == {"fehler": "Diesen Pfad gibt es nicht."}
+    assert cockpit.client.put("/ki/sources", content=b"{", headers=cockpit.headers()).status_code == 400
+    r = cockpit.push_sources([{"id": "Bad Id", "kind": "sftp"}])
     assert r.status_code == 400 and "id" in r.json()["fehler"]
-    r = cockpit.push_sources([{"id": "a1", "art": "faxgeraet"}])
-    assert r.json() == {"fehler": "Diese Art von Ablage kenne ich nicht: faxgeraet."}
+    r = cockpit.push_sources([{"id": "a1", "kind": "fax"}])
+    assert r.json() == {"fehler": "Diese Art von Ablage kenne ich nicht: fax."}
 
 
 def test_events_are_not_lost_when_more_than_five_wait(cockpit, store):
     for i in range(7):
-        store.add_event(f"e{i}", "zahlen", f"Zahlen {i}", "", None, {})
+        store.add_event(f"e{i}", "pay", f"Pay {i}", "", None, {})
     first = cockpit.poll_events()
     second = cockpit.poll_events()
     assert len(first) == 5 and len(second) == 2
@@ -77,20 +78,7 @@ def test_events_are_not_lost_when_more_than_five_wait(cockpit, store):
     assert cockpit.poll_events() == []
 
 
-def test_module_has_a_menu_entry(cockpit):
-    modul = cockpit.get("ki/modul").json()
-    assert modul["menue"] == {"titel": "Post", "symbol": "FileText"}
-    assert modul["anschluesse"][0] | {"sensibel": False} == {
-        "standard": "vilikon.wissen/1",
-        "name": "Post",
-        "intervall_min": 15,
-        "sensibel": False,
-    }
-
-
 def test_page_behind_the_cockpit_login(client, store):
-    from conftest import TOKEN
-
     assert client.get("/").status_code == 401
     browser = {
         "Authorization": f"Bearer {TOKEN}",
@@ -103,13 +91,13 @@ def test_page_behind_the_cockpit_login(client, store):
         doc = store.add_document(sha=f"{i:064}", name=f"b{i}.pdf", source="test", suffix=".pdf", data=b"%PDF-", pages=1)
         store.update_document(
             doc["id"],
-            status="pruefen",
-            grund="frist_unklar",
-            vertraulich=secret,
-            art="brief",
-            absender="Amtsgericht Musterstadt" if secret else "Musterfirma GmbH",
+            status="review",
+            reason="deadline_unclear",
+            confidential=secret,
+            kind="letter",
+            sender="Amtsgericht Musterstadt" if secret else "Musterfirma GmbH",
         )
-    owner = client.get("/api/dokumente", headers=browser).json()
-    assert len(owner["pruefen"]) == 2 and owner["pruefen"][0]["grund"].startswith("Eine Frist")
-    operator = client.get("/api/dokumente", headers=browser | {"X-Vilikon-Rolle": "betreiber"}).json()
-    assert [d["titel"] for d in operator["dokumente"]] == ["Musterfirma GmbH"]
+    owner = client.get("/api/documents", headers=browser).json()
+    assert len(owner["review"]) == 2 and owner["review"][0]["reason"].startswith("Eine Frist")
+    operator = client.get("/api/documents", headers=browser | {"X-Vilikon-Rolle": "betreiber"}).json()
+    assert [d["title"] for d in operator["documents"]] == ["Musterfirma GmbH"]

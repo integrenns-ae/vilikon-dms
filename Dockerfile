@@ -14,5 +14,5 @@ RUN useradd --system --uid 10001 dms && mkdir -p /data && chown dms /data
 USER dms
 ENV DATA_DIR=/data PORT=8090
 EXPOSE 8090
-HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request,os; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"PORT\"]}/gesund')"
+HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request,os; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"PORT\"]}/health')"
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --proxy-headers"]

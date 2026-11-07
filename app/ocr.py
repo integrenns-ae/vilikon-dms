@@ -1,7 +1,7 @@
 """Reading a letter: Mistral OCR (`mistral-ocr-latest`) returns the text as Markdown and, through document annotation
 with a JSON schema, what the letter is and what it wants. `normalise` then checks the answer against fixed rules, so a
-model's guess never becomes a deadline: court and attorney documents are always confidential, an unclear deadline
-puts the document on the „prüfen“ list instead of into the calendar."""
+model's guess never becomes a due date: court and attorney documents are always confidential, an unclear deadline
+puts the document on the review list instead of into the calendar."""
 
 from __future__ import annotations
 
@@ -28,10 +28,10 @@ IMAGES = {
 ANNOTATION_MAX_PAGES = 8  # Mistral annotates a document as a whole only up to this many pages
 TRANSPORT = None  # tests put an httpx.MockTransport here
 
-KINDS = ("brief", "bescheid", "rechnung", "mahnung", "vertrag", "gericht", "anwalt", "werbung", "sonstiges")
-ACTIONS = ("zahlen", "antworten", "widersprechen", "frist", "keine")
-DEADLINE_KINDS = ("zahlung", "steuer", "widerspruch", "antwort", "gericht", "anwalt", "termin", "sonstiges")
-ALWAYS_CONFIDENTIAL = ("gericht", "anwalt")
+KINDS = ("letter", "notice", "invoice", "reminder", "contract", "court", "attorney", "advertising", "other")
+ACTIONS = ("pay", "reply", "object", "deadline", "none")
+DUE_DATE_KINDS = ("payment", "tax", "objection", "reply", "court", "attorney", "appointment", "other")
+ALWAYS_CONFIDENTIAL = ("court", "attorney")
 
 _TEXT = {"type": "string"}
 _NUMBER = {"type": ["number", "null"]}
@@ -39,53 +39,54 @@ SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "required": [
-        "art",
-        "betreff",
-        "absender",
-        "datum",
-        "aktenzeichen",
-        "handlung",
-        "fristen",
-        "betrag",
+        "kind",
+        "subject",
+        "sender",
+        "date",
+        "file_number",
+        "action",
+        "due_dates",
+        "amount",
         "iban",
-        "verwendungszweck",
-        "ist_beleg",
-        "vertraulich",
+        "payment_reference",
+        "is_receipt",
+        "confidential",
     ],
     "properties": {
-        "art": {
+        "kind": {
             "type": "string",
             "enum": list(KINDS),
-            "description": "What the document is. gericht: anything from a court (summons, decision, hearing date, "
-            "statement of claim); anwalt: a lawyer's letter; bescheid: a notice from an authority "
-            "(tax office, social security); mahnung: a payment reminder; werbung: advertising.",
+            "description": "What the document is. court: anything from a court (summons, decision, hearing date, "
+            "statement of claim); attorney: a lawyer's letter; notice: a notice from an authority "
+            "(tax office, social security); reminder: a payment reminder.",
         },
-        "betreff": {**_TEXT, "description": "The subject line or a short title of at most 80 characters."},
-        "absender": {**_TEXT, "description": "Who sent it: company, authority or person, without the address."},
-        "datum": {**_TEXT, "description": "Date of the letter as YYYY-MM-DD, empty if none is printed."},
-        "aktenzeichen": {
+        "subject": {**_TEXT, "description": "The subject line or a short title of at most 80 characters."},
+        "sender": {**_TEXT, "description": "Who sent it: company, authority or person, without the address."},
+        "date": {**_TEXT, "description": "Date of the letter as YYYY-MM-DD, empty if none is printed."},
+        "file_number": {
             **_TEXT,
-            "description": "File number, tax number, case or customer number, invoice number; empty if none.",
+            "description": "File number (Aktenzeichen), tax number, case or customer number, "
+            "invoice number; empty if none.",
         },
-        "handlung": {
+        "action": {
             "type": "string",
             "enum": list(ACTIONS),
-            "description": "What the recipient must do: zahlen (pay), antworten (reply), widersprechen (object "
-            "to it), frist (keep a date, e.g. a hearing), keine (nothing).",
+            "description": "What the recipient must do: pay, reply, object (to a notice), deadline (keep a date, "
+            "e.g. a hearing), none.",
         },
-        "fristen": {
+        "due_dates": {
             "type": "array",
             "description": "Every date the document sets: payment days, tax due dates, objection periods, court and "
             "attorney dates, appointments. Only dates printed in the document; never compute one.",
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["art", "datum", "betrag", "sicher", "text"],
+                "required": ["kind", "date", "amount", "certain", "text"],
                 "properties": {
-                    "art": {"type": "string", "enum": list(DEADLINE_KINDS)},
-                    "datum": {**_TEXT, "description": "YYYY-MM-DD, empty if the document gives only a period."},
-                    "betrag": {**_NUMBER, "description": "Amount due on this date in EUR, null if none."},
-                    "sicher": {
+                    "kind": {"type": "string", "enum": list(DUE_DATE_KINDS)},
+                    "date": {**_TEXT, "description": "YYYY-MM-DD, empty if the document gives only a period."},
+                    "amount": {**_NUMBER, "description": "Amount due on this date in EUR, null if none."},
+                    "certain": {
                         "type": "boolean",
                         "description": "true only if this exact date is printed in the document.",
                     },
@@ -93,11 +94,11 @@ SCHEMA = {
                 },
             },
         },
-        "betrag": {**_NUMBER, "description": "Total amount to pay in EUR, null if none."},
+        "amount": {**_NUMBER, "description": "Total amount to pay in EUR, null if none."},
         "iban": {**_TEXT, "description": "IBAN to pay to, empty if none."},
-        "verwendungszweck": {**_TEXT, "description": "Payment reference to use, empty if none."},
-        "ist_beleg": {"type": "boolean", "description": "true for an invoice or receipt the bookkeeping needs."},
-        "vertraulich": {"type": "boolean", "description": "true for tax, salary, health, court and lawyer matters."},
+        "payment_reference": {**_TEXT, "description": "Payment reference to use, empty if none."},
+        "is_receipt": {"type": "boolean", "description": "true for an invoice or receipt the bookkeeping needs."},
+        "confidential": {"type": "boolean", "description": "true for tax, salary, health, court and lawyer matters."},
     },
 }
 
@@ -129,7 +130,7 @@ def read(name: str, data: bytes, api_key: str, *, pages: int) -> Reading:
     if pages <= ANNOTATION_MAX_PAGES:
         body["document_annotation_format"] = {
             "type": "json_schema",
-            "json_schema": {"name": "brief", "schema": SCHEMA, "strict": True},
+            "json_schema": {"name": "letter", "schema": SCHEMA, "strict": True},
         }
     try:
         with httpx.Client(timeout=300, transport=TRANSPORT) as c:
@@ -137,9 +138,8 @@ def read(name: str, data: bytes, api_key: str, *, pages: int) -> Reading:
         r.raise_for_status()
         answer = r.json()
     except (httpx.HTTPError, ValueError) as e:
-        raise OcrError(
-            type(e).__name__ + (f" {e.response.status_code}" if isinstance(e, httpx.HTTPStatusError) else "")
-        ) from e
+        status = f" {e.response.status_code}" if isinstance(e, httpx.HTTPStatusError) else ""
+        raise OcrError(type(e).__name__ + status) from e
     text = "\n\n".join(p.get("markdown", "").strip() for p in answer.get("pages", []) if p.get("markdown", "").strip())
     processed = int((answer.get("usage_info") or {}).get("pages_processed") or len(answer.get("pages", [])) or pages)
     fields = answer.get("document_annotation") or {}
@@ -176,49 +176,49 @@ def iban_ok(iban: str) -> bool:
 
 def normalise(fields: dict) -> tuple[dict, list[dict], str]:
     """(document fields, due dates, reason). An empty reason means done; any other is why a person must look
-    („prüfen“): an unclear deadline, a court letter without one, a wrong IBAN, no annotation at all."""
+    (status `review`): an unclear due date, a court letter without one, a wrong IBAN, no annotation at all."""
     if not fields:
-        return {"art": "sonstiges", "handlung": "keine", "vertraulich": 0, "ist_beleg": 0}, [], "keine_angaben"
-    kind = fields.get("art") if fields.get("art") in KINDS else "sonstiges"
-    action = fields.get("handlung") if fields.get("handlung") in ACTIONS else "keine"
+        return {"kind": "other", "action": "none", "confidential": 0, "is_receipt": 0}, [], "no_fields"
+    kind = fields.get("kind") if fields.get("kind") in KINDS else "other"
+    action = fields.get("action") if fields.get("action") in ACTIONS else "none"
     out = {
-        "art": kind,
-        "betreff": str(fields.get("betreff") or "").strip()[:200],
-        "absender": str(fields.get("absender") or "").strip()[:200],
-        "datum": _iso(fields.get("datum")),
-        "aktenzeichen": str(fields.get("aktenzeichen") or "").strip()[:100],
-        "handlung": action,
-        "betrag": _amount(fields.get("betrag")),
+        "kind": kind,
+        "subject": str(fields.get("subject") or "").strip()[:200],
+        "sender": str(fields.get("sender") or "").strip()[:200],
+        "date": _iso(fields.get("date")),
+        "file_number": str(fields.get("file_number") or "").strip()[:100],
+        "action": action,
+        "amount": _amount(fields.get("amount")),
         "iban": re.sub(r"\s", "", str(fields.get("iban") or "")).upper(),
-        "verwendungszweck": str(fields.get("verwendungszweck") or "").strip()[:140],
-        "ist_beleg": int(bool(fields.get("ist_beleg"))),
-        "vertraulich": int(bool(fields.get("vertraulich")) or kind in ALWAYS_CONFIDENTIAL),
+        "payment_reference": str(fields.get("payment_reference") or "").strip()[:140],
+        "is_receipt": int(bool(fields.get("is_receipt"))),
+        "confidential": int(bool(fields.get("confidential")) or kind in ALWAYS_CONFIDENTIAL),
     }
-    if kind == "werbung":
-        return out | {"handlung": "keine", "ist_beleg": 0, "betrag": None, "iban": ""}, [], ""
-    deadlines, unclear = [], False
-    for f in fields.get("fristen") or []:
-        if not isinstance(f, dict):
+    if kind == "advertising":
+        return out | {"action": "none", "is_receipt": 0, "amount": None, "iban": ""}, [], ""
+    due_dates, unclear = [], False
+    for d in fields.get("due_dates") or []:
+        if not isinstance(d, dict):
             continue
-        day = _iso(f.get("datum"))
-        if not day or f.get("sicher") is not True:
+        day = _iso(d.get("date"))
+        if not day or d.get("certain") is not True:
             unclear = True  # never guessed: a person looks at it
             continue
-        deadlines.append(
+        due_dates.append(
             {
-                "art": f.get("art") if f.get("art") in DEADLINE_KINDS else "sonstiges",
-                "datum": day,
-                "betrag": _amount(f.get("betrag")),
-                "text": str(f.get("text") or "").strip()[:300],
+                "kind": d.get("kind") if d.get("kind") in DUE_DATE_KINDS else "other",
+                "date": day,
+                "amount": _amount(d.get("amount")),
+                "text": str(d.get("text") or "").strip()[:300],
             }
         )
     reason = ""
     if unclear:
-        reason = "frist_unklar"
-    elif kind in ALWAYS_CONFIDENTIAL and action != "keine" and not deadlines:
-        reason = "gericht_ohne_frist"
-    elif action == "frist" and not deadlines:
-        reason = "frist_unklar"
+        reason = "deadline_unclear"
+    elif kind in ALWAYS_CONFIDENTIAL and action != "none" and not due_dates:
+        reason = "court_without_deadline"
+    elif action == "deadline" and not due_dates:
+        reason = "deadline_unclear"
     if out["iban"] and not iban_ok(out["iban"]):
-        out["iban"], reason = "", reason or "iban_falsch"
-    return out, deadlines, reason
+        out["iban"], reason = "", reason or "iban_invalid"
+    return out, due_dates, reason

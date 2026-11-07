@@ -1,6 +1,7 @@
-"""Pages per calendar month. The operator offers the DMS for free with a cap per instance (`DMS_SEITEN_MONAT`); at the
-cap a document waits (status `wartet`) and goes on, oldest first, when the next month starts. With an own Mistral key
-of the customer (pushed by the cockpit in `PUT ki/quellen`) there is no cap: the pages are on the customer's bill."""
+"""Pages per calendar month. The operator offers the DMS for free with a cap per instance (`DMS_PAGES_PER_MONTH`); at
+the cap a document waits (status `waiting`) and goes on, oldest first, when the next month starts. With an own Mistral
+key of the customer (pushed by the cockpit in `PUT ki/sources`) there is no cap: the pages are on the customer's
+bill."""
 
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ from datetime import UTC, datetime
 from app import config
 from app.store import Store
 
-OWN_KEY = "mistral_schluessel"
+OWN_KEY = "mistral_key"
 
 
 def month(at: datetime | None = None) -> str:
@@ -47,9 +48,9 @@ def book(store: Store, pages: int, at: datetime | None = None) -> None:
 def state(store: Store, at: datetime | None = None) -> dict:
     used, limit = store.pages_used(month(at)), cap(store)
     return {
-        "monat": month(at),
-        "seiten": used,
-        "grenze": limit or None,
-        "eigener_schluessel": bool(own_key(store)),
-        "wartend": len(store.documents(status=("wartet",))),
+        "month": month(at),
+        "pages": used,
+        "cap": limit or None,
+        "own_key": bool(own_key(store)),
+        "waiting": len(store.documents(status=("waiting",))),
     }

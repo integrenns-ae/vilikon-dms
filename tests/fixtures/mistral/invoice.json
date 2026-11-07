@@ -12,7 +12,7 @@
   }
  ],
  "model": "mistral-ocr-2505-completion",
- "document_annotation": "{\"art\": \"rechnung\", \"betreff\": \"Rechnung Nr. RE-2026-0815\", \"absender\": \"Musterfirma GmbH\", \"datum\": \"2026-11-02\", \"aktenzeichen\": \"RE-2026-0815\", \"handlung\": \"zahlen\", \"fristen\": [{\"art\": \"zahlung\", \"datum\": \"2026-11-20\", \"betrag\": 1190.0, \"sicher\": true, \"text\": \"Bitte überweisen Sie den Betrag bis zum 20.11.2026\"}], \"betrag\": 1190.0, \"iban\": \"DE89 3704 0044 0532 0130 00\", \"verwendungszweck\": \"RE-2026-0815\", \"ist_beleg\": true, \"vertraulich\": false}",
+ "document_annotation": "{\"kind\": \"invoice\", \"subject\": \"Rechnung Nr. RE-2026-0815\", \"sender\": \"Musterfirma GmbH\", \"date\": \"2026-11-02\", \"file_number\": \"RE-2026-0815\", \"action\": \"pay\", \"due_dates\": [{\"kind\": \"payment\", \"date\": \"2026-11-20\", \"amount\": 1190.0, \"certain\": true, \"text\": \"Bitte überweisen Sie den Betrag bis zum 20.11.2026\"}], \"amount\": 1190.0, \"iban\": \"DE89 3704 0044 0532 0130 00\", \"payment_reference\": \"RE-2026-0815\", \"is_receipt\": true, \"confidential\": false}",
  "usage_info": {
   "pages_processed": 1,
   "doc_size_bytes": 48213

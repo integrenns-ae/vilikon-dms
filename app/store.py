@@ -1,5 +1,5 @@
 """SQLite under $DATA_DIR: documents with what was read from them, due dates, cases by file number, events for the
-cockpit, the log, page counts, sources. Originals lie beside it in `originale/`. One connection, one lock: the DMS
+cockpit, the log, page counts, sources. Originals lie beside it in `originals/`. One connection, one lock: the DMS
 handles a handful of letters a day."""
 
 from __future__ import annotations
@@ -13,52 +13,53 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS dokumente (
-    id TEXT PRIMARY KEY, sha256 TEXT UNIQUE NOT NULL, name TEXT NOT NULL, quelle TEXT NOT NULL, endung TEXT NOT NULL,
-    empfangen TEXT NOT NULL, geaendert TEXT NOT NULL, seiten INTEGER NOT NULL DEFAULT 1,
-    status TEXT NOT NULL, grund TEXT NOT NULL DEFAULT '',
-    art TEXT NOT NULL DEFAULT '', betreff TEXT NOT NULL DEFAULT '', absender TEXT NOT NULL DEFAULT '',
-    datum TEXT NOT NULL DEFAULT '', aktenzeichen TEXT NOT NULL DEFAULT '', handlung TEXT NOT NULL DEFAULT '',
-    betrag REAL, iban TEXT NOT NULL DEFAULT '', verwendungszweck TEXT NOT NULL DEFAULT '',
-    ist_beleg INTEGER NOT NULL DEFAULT 0, vertraulich INTEGER NOT NULL DEFAULT 0,
-    text TEXT NOT NULL DEFAULT '', fall_id TEXT
+CREATE TABLE IF NOT EXISTS documents (
+    id TEXT PRIMARY KEY, sha256 TEXT UNIQUE NOT NULL, name TEXT NOT NULL, source TEXT NOT NULL, suffix TEXT NOT NULL,
+    received_at TEXT NOT NULL, updated_at TEXT NOT NULL, pages INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL DEFAULT '', subject TEXT NOT NULL DEFAULT '', sender TEXT NOT NULL DEFAULT '',
+    date TEXT NOT NULL DEFAULT '', file_number TEXT NOT NULL DEFAULT '', action TEXT NOT NULL DEFAULT '',
+    amount REAL, iban TEXT NOT NULL DEFAULT '', payment_reference TEXT NOT NULL DEFAULT '',
+    is_receipt INTEGER NOT NULL DEFAULT 0, confidential INTEGER NOT NULL DEFAULT 0,
+    text TEXT NOT NULL DEFAULT '', case_id TEXT
 );
-CREATE TABLE IF NOT EXISTS fristen (
-    id TEXT PRIMARY KEY, dokument_id TEXT NOT NULL, art TEXT NOT NULL, datum TEXT NOT NULL, betrag REAL,
+CREATE TABLE IF NOT EXISTS due_dates (
+    id TEXT PRIMARY KEY, document_id TEXT NOT NULL, kind TEXT NOT NULL, date TEXT NOT NULL, amount REAL,
     text TEXT NOT NULL DEFAULT ''
 );
-CREATE TABLE IF NOT EXISTS faelle (
-    id TEXT PRIMARY KEY, schluessel TEXT UNIQUE NOT NULL, aktenzeichen TEXT NOT NULL, absender TEXT NOT NULL DEFAULT ''
+CREATE TABLE IF NOT EXISTS cases (
+    id TEXT PRIMARY KEY, key TEXT UNIQUE NOT NULL, file_number TEXT NOT NULL, sender TEXT NOT NULL DEFAULT ''
 );
-CREATE TABLE IF NOT EXISTS ereignisse (
-    id TEXT PRIMARY KEY, zeit TEXT NOT NULL, art TEXT NOT NULL, titel TEXT NOT NULL, text TEXT NOT NULL,
-    dokument_id TEXT, daten TEXT NOT NULL DEFAULT '{}', geliefert TEXT
+CREATE TABLE IF NOT EXISTS events (
+    id TEXT PRIMARY KEY, time TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, text TEXT NOT NULL,
+    document_id TEXT, data TEXT NOT NULL DEFAULT '{}', delivered_at TEXT
 );
-CREATE TABLE IF NOT EXISTS protokoll (zeit TEXT NOT NULL, wer TEXT NOT NULL, was TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS seiten (monat TEXT PRIMARY KEY, seiten INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS quellen (id TEXT PRIMARY KEY, daten TEXT NOT NULL, fehler TEXT NOT NULL DEFAULT '',
-    letzter_abruf TEXT);
-CREATE TABLE IF NOT EXISTS werte (schluessel TEXT PRIMARY KEY, wert TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS eingang (quelle_id TEXT NOT NULL, eingang_id TEXT NOT NULL, version TEXT NOT NULL,
-    PRIMARY KEY (quelle_id, eingang_id));
+CREATE TABLE IF NOT EXISTS log (time TEXT NOT NULL, who TEXT NOT NULL, what TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS pages (month TEXT PRIMARY KEY, pages INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS sources (id TEXT PRIMARY KEY, data TEXT NOT NULL, error TEXT NOT NULL DEFAULT '',
+    last_fetch TEXT);
+CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS intake_seen (source_id TEXT NOT NULL, item_id TEXT NOT NULL, version TEXT NOT NULL,
+    PRIMARY KEY (source_id, item_id));
 """
 
 DOCUMENT_FIELDS = (
-    "art",
-    "betreff",
-    "absender",
-    "datum",
-    "aktenzeichen",
-    "handlung",
-    "betrag",
+    "kind",
+    "subject",
+    "sender",
+    "date",
+    "file_number",
+    "action",
+    "amount",
     "iban",
-    "verwendungszweck",
-    "ist_beleg",
-    "vertraulich",
+    "payment_reference",
+    "is_receipt",
+    "confidential",
     "text",
     "status",
-    "grund",
-    "seiten",
+    "reason",
+    "pages",
+    "case_id",
 )
 
 
@@ -75,7 +76,7 @@ def case_key(file_number: str) -> str:
 class Store:
     def __init__(self, data_dir: Path) -> None:
         self.data_dir = Path(data_dir)
-        self.originals = self.data_dir / "originale"
+        self.originals = self.data_dir / "originals"
         self.originals.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.data_dir / "dms.sqlite3", check_same_thread=False, isolation_level=None)
         self.db.row_factory = sqlite3.Row
@@ -98,10 +99,10 @@ class Store:
 
     # documents
     def by_sha(self, sha: str) -> dict | None:
-        return self._one("SELECT * FROM dokumente WHERE sha256 = ?", sha)
+        return self._one("SELECT * FROM documents WHERE sha256 = ?", sha)
 
     def document(self, doc_id: str) -> dict | None:
-        return self._one("SELECT * FROM dokumente WHERE id = ?", doc_id)
+        return self._one("SELECT * FROM documents WHERE id = ?", doc_id)
 
     def add_document(self, *, sha: str, name: str, source: str, suffix: str, data: bytes, pages: int) -> dict:
         doc_id = uuid.uuid4().hex[:12]
@@ -110,8 +111,8 @@ class Store:
         path.write_bytes(data)
         t = now()
         self._run(
-            "INSERT INTO dokumente (id, sha256, name, quelle, endung, empfangen, geaendert, seiten, status) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'neu')",
+            "INSERT INTO documents (id, sha256, name, source, suffix, received_at, updated_at, pages, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new')",
             doc_id,
             sha,
             name,
@@ -127,22 +128,21 @@ class Store:
         return self.originals / sha[:2] / f"{sha}{suffix}"
 
     def original(self, doc: dict) -> bytes:
-        return self.original_path(doc["sha256"], doc["endung"]).read_bytes()
+        return self.original_path(doc["sha256"], doc["suffix"]).read_bytes()
 
     def update_document(self, doc_id: str, **fields) -> None:
-        unknown = set(fields) - set(DOCUMENT_FIELDS) - {"fall_id"}
+        unknown = set(fields) - set(DOCUMENT_FIELDS)
         if unknown:
             raise ValueError(f"unknown fields: {sorted(unknown)}")
         sets = ", ".join(f"{k} = ?" for k in fields)
-        self._run(f"UPDATE dokumente SET {sets}, geaendert = ? WHERE id = ?", *fields.values(), now(), doc_id)
+        self._run(f"UPDATE documents SET {sets}, updated_at = ? WHERE id = ?", *fields.values(), now(), doc_id)
 
     def documents(self, *, status: tuple[str, ...] = (), limit: int = 5000) -> list[dict]:
         if status:
             marks = ",".join("?" * len(status))
-            return self._all(
-                f"SELECT * FROM dokumente WHERE status IN ({marks}) ORDER BY empfangen, rowid LIMIT ?", *status, limit
-            )
-        return self._all("SELECT * FROM dokumente ORDER BY empfangen, rowid LIMIT ?", limit)
+            sql = f"SELECT * FROM documents WHERE status IN ({marks}) ORDER BY received_at, rowid LIMIT ?"
+            return self._all(sql, *status, limit)
+        return self._all("SELECT * FROM documents ORDER BY received_at, rowid LIMIT ?", limit)
 
     def search(
         self,
@@ -154,38 +154,39 @@ class Store:
         confidential: bool = False,
         limit: int = 20,
     ) -> list[dict]:
-        sql, args = "SELECT * FROM dokumente WHERE status IN ('fertig', 'pruefen')", []
+        sql, args = "SELECT * FROM documents WHERE status IN ('done', 'review')", []
         if not confidential:
-            sql += " AND vertraulich = 0"
+            sql += " AND confidential = 0"
         for word in words.split():
-            sql += " AND (betreff LIKE ? OR absender LIKE ? OR aktenzeichen LIKE ? OR text LIKE ?)"
+            sql += " AND (subject LIKE ? OR sender LIKE ? OR file_number LIKE ? OR text LIKE ?)"
             args += [f"%{word}%"] * 4
+        day = "COALESCE(NULLIF(date, ''), substr(received_at, 1, 10))"
         if kind:
-            sql, args = sql + " AND art = ?", [*args, kind]
+            sql, args = sql + " AND kind = ?", [*args, kind]
         if since:
-            sql, args = sql + " AND COALESCE(NULLIF(datum, ''), substr(empfangen, 1, 10)) >= ?", [*args, since]
+            sql, args = sql + f" AND {day} >= ?", [*args, since]
         if until:
-            sql, args = sql + " AND COALESCE(NULLIF(datum, ''), substr(empfangen, 1, 10)) <= ?", [*args, until]
-        return self._all(sql + " ORDER BY empfangen DESC LIMIT ?", *args, limit)
+            sql, args = sql + f" AND {day} <= ?", [*args, until]
+        return self._all(sql + " ORDER BY received_at DESC LIMIT ?", *args, limit)
 
     # due dates
-    def set_deadlines(self, doc_id: str, deadlines: list[dict]) -> None:
+    def set_due_dates(self, doc_id: str, due_dates: list[dict]) -> None:
         with self.lock:
-            self.db.execute("DELETE FROM fristen WHERE dokument_id = ?", (doc_id,))
-            for i, f in enumerate(deadlines):
+            self.db.execute("DELETE FROM due_dates WHERE document_id = ?", (doc_id,))
+            for i, d in enumerate(due_dates):
                 self.db.execute(
-                    "INSERT INTO fristen (id, dokument_id, art, datum, betrag, text) VALUES (?, ?, ?, ?, ?, ?)",
-                    (f"{doc_id}-{i}", doc_id, f["art"], f["datum"], f.get("betrag"), f.get("text", "")),
+                    "INSERT INTO due_dates (id, document_id, kind, date, amount, text) VALUES (?, ?, ?, ?, ?, ?)",
+                    (f"{doc_id}-{i}", doc_id, d["kind"], d["date"], d.get("amount"), d.get("text", "")),
                 )
 
-    def deadlines(self, doc_id: str) -> list[dict]:
-        return self._all("SELECT * FROM fristen WHERE dokument_id = ? ORDER BY datum", doc_id)
+    def due_dates(self, doc_id: str) -> list[dict]:
+        return self._all("SELECT * FROM due_dates WHERE document_id = ? ORDER BY date", doc_id)
 
-    def deadlines_between(self, since: str, until: str) -> list[dict]:
+    def due_dates_between(self, since: str, until: str) -> list[dict]:
         return self._all(
-            "SELECT f.*, d.absender, d.betreff, d.art AS dokument_art, d.vertraulich, d.aktenzeichen "
-            "FROM fristen f JOIN dokumente d ON d.id = f.dokument_id "
-            "WHERE f.datum >= ? AND f.datum <= ? ORDER BY f.datum",
+            "SELECT u.*, d.sender, d.subject, d.kind AS document_kind, d.confidential, d.file_number "
+            "FROM due_dates u JOIN documents d ON d.id = u.document_id "
+            "WHERE u.date >= ? AND u.date <= ? ORDER BY u.date",
             since,
             until,
         )
@@ -195,26 +196,22 @@ class Store:
         key = case_key(file_number)
         if len(key) < 4:
             return None
-        found = self._one("SELECT id FROM faelle WHERE schluessel = ?", key)
+        found = self._one("SELECT id FROM cases WHERE key = ?", key)
         if found:
             return found["id"]
         case_id = uuid.uuid4().hex[:12]
         self._run(
-            "INSERT INTO faelle (id, schluessel, aktenzeichen, absender) VALUES (?, ?, ?, ?)",
-            case_id,
-            key,
-            file_number,
-            sender,
+            "INSERT INTO cases (id, key, file_number, sender) VALUES (?, ?, ?, ?)", case_id, key, file_number, sender
         )
         return case_id
 
     def case_documents(self, case_id: str) -> list[dict]:
-        return self._all("SELECT * FROM dokumente WHERE fall_id = ? ORDER BY datum, empfangen", case_id)
+        return self._all("SELECT * FROM documents WHERE case_id = ? ORDER BY date, received_at", case_id)
 
     # events
     def add_event(self, event_id: str, kind: str, title: str, text: str, doc_id: str | None, data: dict) -> None:
         self._run(
-            "INSERT OR IGNORE INTO ereignisse (id, zeit, art, titel, text, dokument_id, daten) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO events (id, time, kind, title, text, document_id, data) VALUES (?, ?, ?, ?, ?, ?, ?)",
             event_id,
             now(),
             kind,
@@ -225,88 +222,84 @@ class Store:
         )
 
     def events_for_cockpit(self, since: str, limit: int) -> list[dict]:
-        """Not yet delivered first, then what is newer than `seit`. The cockpit takes at most 5 per fetch and moves `seit`
-        on, so an undelivered event must come again until it was handed out once; ids it has seen it skips."""
+        """Not yet delivered first, then what is newer than `since`. The cockpit takes at most 5 per fetch and moves
+        `seit` on, so an undelivered event must come again until it was handed out once; ids it has seen it skips."""
         with self.lock:
             rows = self._all(
-                "SELECT * FROM ereignisse WHERE geliefert IS NULL OR zeit > ? ORDER BY geliefert IS NOT NULL, "
-                "zeit LIMIT ?",
+                "SELECT * FROM events WHERE delivered_at IS NULL OR time > ? "
+                "ORDER BY delivered_at IS NOT NULL, time LIMIT ?",
                 since or "9",
                 limit,
             )
             t = now()
             for r in rows:
-                if not r["geliefert"]:
-                    self.db.execute("UPDATE ereignisse SET geliefert = ? WHERE id = ?", (t, r["id"]))
+                if not r["delivered_at"]:
+                    self.db.execute("UPDATE events SET delivered_at = ? WHERE id = ?", (t, r["id"]))
         return rows
-
-    def events(self) -> list[dict]:
-        return self._all("SELECT * FROM ereignisse ORDER BY zeit")
 
     # log
     def log(self, who: str, what: str) -> None:
-        self._run("INSERT INTO protokoll (zeit, wer, was) VALUES (?, ?, ?)", now(), who, what)
+        self._run("INSERT INTO log (time, who, what) VALUES (?, ?, ?)", now(), who, what)
 
     def log_between(self, since: str, until: str) -> list[dict]:
-        return self._all(
-            "SELECT zeit, wer, was FROM protokoll WHERE zeit >= ? AND zeit <= ? ORDER BY zeit", since, until
-        )
+        return self._all("SELECT time, who, what FROM log WHERE time >= ? AND time <= ? ORDER BY time", since, until)
 
     # pages
     def pages_used(self, month: str) -> int:
-        row = self._one("SELECT seiten FROM seiten WHERE monat = ?", month)
-        return int(row["seiten"]) if row else 0
+        row = self._one("SELECT pages FROM pages WHERE month = ?", month)
+        return int(row["pages"]) if row else 0
 
     def add_pages(self, month: str, pages: int) -> None:
         self._run(
-            "INSERT INTO seiten (monat, seiten) VALUES (?, ?) ON CONFLICT(monat) DO UPDATE SET seiten = seiten + ?",
+            "INSERT INTO pages (month, pages) VALUES (?, ?) ON CONFLICT(month) DO UPDATE SET pages = pages + ?",
             month,
             pages,
             pages,
         )
 
-    # sources and values
+    # sources and settings
     def set_sources(self, sources: list[dict]) -> None:
         with self.lock:
             keep = {s["id"] for s in sources}
-            for row in self.db.execute("SELECT id FROM quellen").fetchall():
+            for row in self.db.execute("SELECT id FROM sources").fetchall():
                 if row["id"] not in keep:
-                    self.db.execute("DELETE FROM quellen WHERE id = ?", (row["id"],))
+                    self.db.execute("DELETE FROM sources WHERE id = ?", (row["id"],))
             for s in sources:
                 self.db.execute(
-                    "INSERT INTO quellen (id, daten) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET daten = ?",
+                    "INSERT INTO sources (id, data) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = ?",
                     (s["id"], json.dumps(s), json.dumps(s)),
                 )
 
     def sources(self) -> list[dict]:
+        """Each source as pushed, plus `_error` and `_last_fetch` (never sent back with the secrets)."""
         out = []
-        for r in self._all("SELECT * FROM quellen ORDER BY id"):
-            out.append(json.loads(r["daten"]) | {"_fehler": r["fehler"], "_letzter_abruf": r["letzter_abruf"]})
+        for r in self._all("SELECT * FROM sources ORDER BY id"):
+            out.append(json.loads(r["data"]) | {"_error": r["error"], "_last_fetch": r["last_fetch"]})
         return out
 
     def source_state(self, source_id: str, error: str) -> None:
-        self._run("UPDATE quellen SET fehler = ?, letzter_abruf = ? WHERE id = ?", error, now(), source_id)
+        self._run("UPDATE sources SET error = ?, last_fetch = ? WHERE id = ?", error, now(), source_id)
 
     def value(self, key: str, default: str = "") -> str:
-        row = self._one("SELECT wert FROM werte WHERE schluessel = ?", key)
-        return row["wert"] if row else default
+        row = self._one("SELECT value FROM settings WHERE key = ?", key)
+        return row["value"] if row else default
 
     def set_value(self, key: str, value: str) -> None:
         self._run(
-            "INSERT INTO werte (schluessel, wert) VALUES (?, ?) ON CONFLICT(schluessel) DO UPDATE SET wert = ?",
+            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?",
             key,
             value,
             value,
         )
 
     def seen(self, source_id: str, item_id: str) -> str | None:
-        row = self._one("SELECT version FROM eingang WHERE quelle_id = ? AND eingang_id = ?", source_id, item_id)
+        row = self._one("SELECT version FROM intake_seen WHERE source_id = ? AND item_id = ?", source_id, item_id)
         return row["version"] if row else None
 
     def mark_seen(self, source_id: str, item_id: str, version: str) -> None:
         self._run(
-            "INSERT INTO eingang (quelle_id, eingang_id, version) VALUES (?, ?, ?) "
-            "ON CONFLICT(quelle_id, eingang_id) DO UPDATE SET version = ?",
+            "INSERT INTO intake_seen (source_id, item_id, version) VALUES (?, ?, ?) "
+            "ON CONFLICT(source_id, item_id) DO UPDATE SET version = ?",
             source_id,
             item_id,
             version,

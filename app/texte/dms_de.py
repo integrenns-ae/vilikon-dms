@@ -140,4 +140,14 @@ TEXTE = {
     "fehler.quelle_id": "Jede Ablage braucht eine id aus Kleinbuchstaben, Ziffern, - und _.",
     "fehler.pfad": "Diesen Pfad gibt es nicht.",
     "fehler.eingabe": "Die Angaben passen nicht: {fehler}",
+    # page
+    "modul.menue": "Post",
+    "seite.hochladen": "Brief fotografieren oder PDF wählen (mehrere Seiten auf einmal)",
+    "seite.senden": "Hochladen",
+    "seite.pruefen": "Zu prüfen",
+    "seite.eingang": "Eingang",
+    "seite.leer": "Nichts da.",
+    "seite.vertraulich": "vertraulich",
+    "seite.seiten": "Seiten diesen Monat",
+    "seite.laedt": "Wird gelesen …",
 }

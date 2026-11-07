@@ -11,6 +11,8 @@
   ein Beleg ist und ob er vertraulich ist. Post vom Gericht oder Anwalt ist immer vertraulich und geht nur an den
   Inhaber; eine unklare Frist wird nie geraten, der Brief kommt auf „prüfen“.
 - Briefe mit demselben Aktenzeichen bilden einen Vorgang.
-- Seitengrenze pro Monat; darüber warten Briefe bis zum Monatsanfang. Ein eigener Mistral-Schlüssel hebt sie auf.
+- Eigene Seite im Menü „Post“: Eingang, Liste „prüfen“ und Hochladen vom Handy. Vertrauliche Briefe sieht nur der
+  Inhaber.
+- Seitengrenze pro Monat (Vorgabe 500 Seiten); darüber warten Briefe bis zum Monatsanfang. Ein eigener Mistral-Schlüssel hebt sie auf.
 - Anschluss ans Cockpit: Firmengedächtnis (vertrauliche Briefe vertraulich), Ereignisse für Aufgaben, zwei Karten,
   Funktionen zum Suchen, für Fristen und Belegdaten.

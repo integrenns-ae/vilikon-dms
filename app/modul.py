@@ -76,6 +76,7 @@ def describe() -> dict:
             {"art": e, "titel": t(f"ereignis.{e}"), "beschreibung": t(f"ereignis.{e}_beschreibung")} for e in EVENTS
         ],
         "ereignisse_intervall_min": 5,
+        "menue": {"titel": t("modul.menue"), "symbol": "FileText"},
         "karten": [
             {"titel": t("karte.post_titel"), "pfad": "ki/karten/post"},
             {"titel": t("karte.seiten_titel"), "pfad": "ki/karten/seiten"},

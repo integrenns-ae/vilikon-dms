@@ -21,11 +21,14 @@ customer's file stores and to Mistral.
 | `DMS_SPRACHE` | `de` | `de` or `en`, fixed per instance like the cockpit's. |
 | `MISTRAL_API_KEY` | – | The operator's key. Without any key documents wait. |
 | `MISTRAL_OCR_MODEL` | `mistral-ocr-latest` | |
-| `DMS_SEITEN_MONAT` | `300` | Pages per calendar month on the operator's key; `0` = no cap. |
+| `DMS_SEITEN_MONAT` | `500` | Pages per calendar month on the operator's key; `0` = no cap. |
 | `DMS_INTERVALL_MIN` | `10` | How often the file stores are fetched; `0` = only on `POST ki/abgleich`. |
 
-The port must stay on the internal network. `/api/upload` trusts `X-Vilikon-Benutzer`, which Caddy sets after
-`forward_auth` against the cockpit (and strips from the client's request).
+The cockpit calls the DMS at `http://dms:8090`. The browser reaches it through Caddy at `/modul/dms/` (prefix stripped,
+`X-Forwarded-Prefix: /modul/dms`) behind the cockpit's login: `forward_auth` adds the token, `X-Vilikon-Benutzer`
+(email) and `X-Vilikon-Rolle` (`kunde` = owner, `betreiber` = operator), and never forwards `ki/…` from the browser.
+The port must stay on the internal network. The image runs with a read-only root file system: it writes only to
+`DATA_DIR` and `/tmp` (tmpfs).
 
 ## Flow
 
@@ -115,10 +118,13 @@ aktenzeichen, handlung, fristen[], status`). Files are Markdown, so the cockpit 
 `art`: `sftp`, `ftp` (FTPS unless `tls: false`); `smb`, `gdrive`, `onedrive` answer "not supported yet". Stores are
 read only, unless `verschieben: true` moves done files into the subfolder `erledigt/`.
 
-### Phone
+### Page and phone
 
-`POST /api/upload` (multipart, field `dateien`, several images or one PDF): the pages become one PDF and are read at
-once. Answer `{id, doppelt, status, text}`. Needs `X-Vilikon-Benutzer` from Caddy's forward_auth (or the token).
+`GET /` (menu entry „Post“ / "Mail", `/modul/dms/` from outside): the inbox, the „prüfen“ list, the page count and an
+upload form for phone photos. `GET /api/dokumente` feeds it; confidential letters only for the role `kunde`.
+
+`POST /api/upload` (`/modul/dms/api/upload` from outside) (multipart, field `dateien`, several images or one PDF): the pages become one PDF and are read at
+once. Answer `{id, doppelt, status, text}`. Needs the token or `X-Vilikon-Benutzer` from Caddy's forward_auth.
 
 ## Development
 

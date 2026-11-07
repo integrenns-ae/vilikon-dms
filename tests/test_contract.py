@@ -75,3 +75,41 @@ def test_events_are_not_lost_when_more_than_five_wait(cockpit, store):
     assert len(first) == 5 and len(second) == 2
     assert {e["id"] for e in first + second} == {f"e{i}" for i in range(7)}
     assert cockpit.poll_events() == []
+
+
+def test_module_has_a_menu_entry(cockpit):
+    modul = cockpit.get("ki/modul").json()
+    assert modul["menue"] == {"titel": "Post", "symbol": "FileText"}
+    assert modul["anschluesse"][0] | {"sensibel": False} == {
+        "standard": "vilikon.wissen/1",
+        "name": "Post",
+        "intervall_min": 15,
+        "sensibel": False,
+    }
+
+
+def test_page_behind_the_cockpit_login(client, store):
+    from conftest import TOKEN
+
+    assert client.get("/").status_code == 401
+    browser = {
+        "Authorization": f"Bearer {TOKEN}",
+        "X-Vilikon-Benutzer": "erika@example.com",
+        "X-Vilikon-Rolle": "kunde",
+    }
+    page = client.get("/", headers=browser)
+    assert page.status_code == 200 and "<h1>Post</h1>" in page.text and 'fetch("api/upload"' in page.text
+    for i, secret in enumerate((0, 1)):
+        doc = store.add_document(sha=f"{i:064}", name=f"b{i}.pdf", source="test", suffix=".pdf", data=b"%PDF-", pages=1)
+        store.update_document(
+            doc["id"],
+            status="pruefen",
+            grund="frist_unklar",
+            vertraulich=secret,
+            art="brief",
+            absender="Amtsgericht Musterstadt" if secret else "Musterfirma GmbH",
+        )
+    owner = client.get("/api/dokumente", headers=browser).json()
+    assert len(owner["pruefen"]) == 2 and owner["pruefen"][0]["grund"].startswith("Eine Frist")
+    operator = client.get("/api/dokumente", headers=browser | {"X-Vilikon-Rolle": "betreiber"}).json()
+    assert [d["titel"] for d in operator["dokumente"]] == ["Musterfirma GmbH"]

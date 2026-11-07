@@ -139,4 +139,14 @@ TEXTE = {
     "fehler.quelle_id": "Every file store needs an id of lowercase letters, digits, - and _.",
     "fehler.pfad": "This path does not exist.",
     "fehler.eingabe": "The input does not fit: {fehler}",
+    # page
+    "modul.menue": "Mail",
+    "seite.hochladen": "Photograph a letter or choose a PDF (several pages at once)",
+    "seite.senden": "Upload",
+    "seite.pruefen": "To check",
+    "seite.eingang": "Inbox",
+    "seite.leer": "Nothing here.",
+    "seite.vertraulich": "confidential",
+    "seite.seiten": "Pages this month",
+    "seite.laedt": "Reading …",
 }

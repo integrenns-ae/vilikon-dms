@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hmac
+import html
 import json
 import logging
 import re
@@ -14,7 +15,7 @@ from datetime import date, timedelta
 from fastapi import Depends, FastAPI, File, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.exceptions import HTTPException
 
 from app import VERSION, budget, config, intake, pipeline
@@ -96,7 +97,8 @@ def cockpit(request: Request) -> str:
 
 
 def person(request: Request) -> str:
-    """The phone upload: Caddy's forward_auth has checked the login and set the user; the cockpit may use the token."""
+    """The page and the phone upload, reached as /modul/dms/… through Caddy: the cockpit's forward_auth has checked the
+    login and sends the token with the user's email (`ki/` is never forwarded from the browser)."""
     if _token_ok(request):
         return request.headers.get("x-vilikon-benutzer") or "cockpit"
     user = request.headers.get("x-vilikon-benutzer")
@@ -425,3 +427,67 @@ async def upload(dateien: list[UploadFile] = File(...), who: str = Depends(perso
         "status": doc["status"],
         "text": t("upload.doppelt") if got.duplicate else t(f"upload.status_{doc['status']}"),
     }
+
+
+# --- page ------------------------------------------------------------------------------------------------------------
+
+OWNER_ROLE = "kunde"  # the operator (`betreiber`) sees no confidential letters of the customer
+PAGE_KEYS = (
+    "modul.name",
+    "seite.hochladen",
+    "seite.senden",
+    "seite.pruefen",
+    "seite.eingang",
+    "seite.leer",
+    "seite.vertraulich",
+    "seite.seiten",
+    "seite.laedt",
+)
+
+
+@app.get("/api/dokumente")
+def page_documents(request: Request, who: str = Depends(person)) -> dict:
+    """What the page shows: the latest 50 letters and the „prüfen“ list; confidential ones only for the owner."""
+    owner = request.headers.get("x-vilikon-rolle") == OWNER_ROLE
+    store = get_store()
+    docs = [d for d in reversed(store.documents()) if owner or not d["vertraulich"]]
+    rows = [_row(d) | {"titel": pipeline.title(d), "art_text": t(f"art.{d['art']}") if d["art"] else ""} for d in docs]
+    return {
+        "pruefen": [r for r in rows if r["status"] == "pruefen"],
+        "dokumente": rows[:50],
+        "seiten": budget.state(store),
+    }
+
+
+PAGE = """<!doctype html><html lang="{lang}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title}</title><style>body{{font-family:system-ui,sans-serif;margin:0 auto;max-width:720px;padding:16px;
+color:#1f2328;background:#fff}}@media(prefers-color-scheme:dark){{body{{color:#e6edf3;background:#0d1117}}}}
+li{{margin:6px 0}}small{{opacity:.7}}button{{font-size:1rem;padding:8px 14px}}</style>
+<h1>{title}</h1><form id="f"><label>{upload}<br><input type="file" name="dateien" accept="image/*,application/pdf"
+capture="environment" multiple required></label> <button>{send}</button><p id="m" role="status"></p></form>
+<h2>{check}</h2><ul id="p"></ul><h2>{inbox}</h2><ul id="d"></ul><p><small id="s"></small></p>
+<script>const T={texts};
+function li(r){{const e=document.createElement("li");e.textContent=r.datum+" · "+(r.art_text?r.art_text+" · ":"")+r.titel+
+(r.vertraulich?" ("+T["seite.vertraulich"]+")":"")+(r.grund?" – "+r.grund:"");return e}}
+function fill(id,rows){{const u=document.getElementById(id);u.replaceChildren(...rows.map(li));
+if(!rows.length){{const e=document.createElement("li");e.textContent=T["seite.leer"];u.append(e)}}}}
+function load(){{fetch("api/dokumente").then(r=>r.json()).then(d=>{{fill("p",d.pruefen);fill("d",d.dokumente);
+document.getElementById("s").textContent=T["seite.seiten"]+": "+d.seiten.seiten+" / "+(d.seiten.grenze||"∞")}})}}
+document.getElementById("f").onsubmit=e=>{{e.preventDefault();const m=document.getElementById("m");m.textContent=T["seite.laedt"];
+fetch("api/upload",{{method:"POST",body:new FormData(e.target)}}).then(r=>r.json()).then(d=>{{m.textContent=d.text||d.fehler;
+e.target.reset();load()}})}};load()</script></html>"""
+
+
+@app.get("/", response_class=HTMLResponse)
+def page(_: str = Depends(person)) -> str:
+    """Inbox, the „prüfen“ list and the phone upload. Relative links: the page lives under /modul/dms/."""
+    texts = json.dumps({k: t(k) for k in PAGE_KEYS}, ensure_ascii=False).replace("<", "\\u003c")
+    return PAGE.format(
+        lang=config.settings.language,
+        title=html.escape(t("modul.name")),
+        upload=html.escape(t("seite.hochladen")),
+        send=html.escape(t("seite.senden")),
+        check=html.escape(t("seite.pruefen")),
+        inbox=html.escape(t("seite.eingang")),
+        texts=texts,
+    )

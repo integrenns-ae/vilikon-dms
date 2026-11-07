@@ -24,7 +24,7 @@ class Settings:
     mistral_api_key: str = field(default_factory=lambda: os.environ.get("MISTRAL_API_KEY", ""))
     mistral_ocr_model: str = field(default_factory=lambda: os.environ.get("MISTRAL_OCR_MODEL", "mistral-ocr-latest"))
     # Pages per calendar month on the operator's key; 0 = no cap. An own key of the customer lifts it.
-    pages_per_month: int = field(default_factory=lambda: _int("DMS_SEITEN_MONAT", 300))
+    pages_per_month: int = field(default_factory=lambda: _int("DMS_SEITEN_MONAT", 500))
     intake_interval_min: int = field(default_factory=lambda: _int("DMS_INTERVALL_MIN", 10))
 
     def __post_init__(self) -> None:

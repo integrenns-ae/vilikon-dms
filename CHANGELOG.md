@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+## 0.2.1
+
+- Liest Post einen Brief vom Handy nicht, sagt die Antwort jetzt, warum: etwa dass er mehr Seiten hat, als im
+  Monat gelesen werden dürfen, oder dass die Seiten des Monats aufgebraucht sind.
+
 ## 0.2.0
 
 - Post ist jetzt ein Werkzeug: Der IT-Betreuer installiert es aus dem Katalog, ohne eigenen Container.

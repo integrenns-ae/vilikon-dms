@@ -1,7 +1,7 @@
 {
   "standard": "vilikon.modul/1",
   "schluessel": "dms",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "name": "Post",
   "beschreibung": "Briefe, Bescheide und Belege aus der Ablage und vom Handy: gelesen, abgelegt, Fristen erkannt.",
   "menue": {

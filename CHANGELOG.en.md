@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.1
+
+- When Mail does not read a letter from the phone, the answer now says why: for example that it has more pages than
+  may be read in a month, or that this month's pages are used up.
+
 ## 0.2.0
 
 - Mail is now a tool app: the IT Specialist installs it from the catalog, without a container of its own.

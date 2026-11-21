@@ -128,6 +128,15 @@ def test_upload_refuses_what_is_not_an_image(client):
     assert client.post("/api/upload", files=mixed, headers=LOGGED_IN).status_code == 400
 
 
+def test_the_phone_says_why_a_letter_is_not_read(client, mistral, monkeypatch):
+    monkeypatch.setattr(config.settings, "pages_per_month", 2)
+    thick = [("files", ("dick.pdf", letter(6, pages=3), "application/pdf"))]
+    r = client.post("/api/upload", files=thick, headers=LOGGED_IN)
+    assert r.json()["status"] == "error"
+    assert r.json()["text"] == "Angekommen. Das Dokument hat mehr Seiten, als im Monat gelesen werden dürfen."
+    assert mistral.requests == []
+
+
 def test_a_shared_pdf_passes_as_it_is(client, mistral, store):
     mistral.default = recorded("advertising")
     pdf = letter(9)

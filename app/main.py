@@ -572,7 +572,12 @@ async def upload(files: list[UploadFile] = File(...), who: str = Depends(person)
     store = get_store()
     got = await asyncio.to_thread(pipeline.receive, store, name, data, "phone", who)
     doc = got.document if got.duplicate else await asyncio.to_thread(pipeline.process, store, got.document)
-    text = t("upload.duplicate") if got.duplicate else t(f"upload.status_{doc['status']}")
+    if got.duplicate:
+        text = t("upload.duplicate")
+    elif doc["status"] in ("error", "waiting") and doc["reason"]:  # say why it is not read (cap, no key, …)
+        text = t("upload.status_new") + " " + t(f"reason.{doc['reason']}")
+    else:
+        text = t(f"upload.status_{doc['status']}")
     return {"id": doc["id"], "duplicate": got.duplicate, "status": doc["status"], "text": text}
 
 

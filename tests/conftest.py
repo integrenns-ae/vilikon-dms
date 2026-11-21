@@ -10,6 +10,7 @@ import io
 import json
 import os
 import stat
+from datetime import UTC, date, datetime, time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -35,6 +36,21 @@ SCANNER = {
 # The vault entry OCR with the operator's key, as the Verwalter sets it.
 OCR = {"OCR_ART": "api_key", "OCR_SERVICE": "mistral", "OCR_PASSWORT": "operator-key", "OCR_BETREIBER": "ja"}
 OWN_PREFIXES = ("DMS_", "OCR_", "SCANNER", "VILIKON_", "MISTRAL_")
+TODAY = date(2026, 11, 21)  # the tests' day: the recorded letters are from early November 2026
+
+
+class Clock:
+    """The DMS's clock (`app.store.now`) on a set day, still moving on from there, so a letter's age stays the same
+    whenever the tests run."""
+
+    def __init__(self, day: date) -> None:
+        self.set(day)
+
+    def set(self, day: date) -> None:
+        self.offset = datetime.combine(day, time(8), UTC) - datetime.now(UTC)
+
+    def now(self) -> str:
+        return (datetime.now(UTC) + self.offset).isoformat(timespec="seconds")
 
 
 def browser(user: str = "erika@example.com", *, owner: bool = False, role: str = "mitarbeiter") -> dict[str, str]:
@@ -248,7 +264,16 @@ class FakeCockpit:
 
 
 @pytest.fixture
-def env(tmp_path, monkeypatch):
+def clock(monkeypatch) -> Clock:
+    from app import store
+
+    fixed = Clock(TODAY)
+    monkeypatch.setattr(store, "now", fixed.now)
+    return fixed
+
+
+@pytest.fixture
+def env(tmp_path, monkeypatch, clock):
     for k in list(os.environ):
         if k.startswith(OWN_PREFIXES) or k == "DATA_DIR":
             monkeypatch.delenv(k)

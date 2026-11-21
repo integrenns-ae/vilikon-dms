@@ -1,7 +1,8 @@
 """Reading a letter: Mistral OCR (`mistral-ocr-latest`) returns the text as Markdown and, through document annotation
 with a JSON schema, what the letter is and what it wants. `normalise` then checks the answer against fixed rules, so a
 model's guess never becomes a due date: court and attorney documents are always confidential, an unclear deadline
-puts the document on the review list instead of into the calendar."""
+puts the document on the review list instead of into the calendar, and so does a receipt without sender, date or
+amount instead of going to the bookkeeping."""
 
 from __future__ import annotations
 
@@ -174,9 +175,25 @@ def iban_ok(iban: str) -> bool:
     return int(digits) % 97 == 1
 
 
+def receipt_gap(doc: dict) -> str:
+    """Why a receipt cannot go to the bookkeeping, as a reason key; "" when it can or it is none. The cockpit's receipt
+    card needs the sender, the date and an amount above zero."""
+    if not doc.get("is_receipt"):
+        return ""
+    amount = doc.get("amount")
+    if isinstance(amount, bool) or not isinstance(amount, int | float) or amount <= 0:
+        return "receipt_no_amount"
+    if not str(doc.get("sender") or "").strip():
+        return "receipt_no_sender"
+    if not _iso(doc.get("date")):
+        return "receipt_no_date"
+    return ""
+
+
 def normalise(fields: dict) -> tuple[dict, list[dict], str]:
     """(document fields, due dates, reason). An empty reason means done; any other is why a person must look
-    (status `review`): an unclear due date, a court letter without one, a wrong IBAN, no annotation at all."""
+    (status `review`): an unclear due date, a court letter without one, a wrong IBAN, a receipt without sender, date
+    or amount, no annotation at all."""
     if not fields:
         return {"kind": "other", "action": "none", "confidential": 0, "is_receipt": 0}, [], "no_fields"
     kind = fields.get("kind") if fields.get("kind") in KINDS else "other"
@@ -221,4 +238,4 @@ def normalise(fields: dict) -> tuple[dict, list[dict], str]:
         reason = "deadline_unclear"
     if out["iban"] and not iban_ok(out["iban"]):
         out["iban"], reason = "", reason or "iban_invalid"
-    return out, due_dates, reason
+    return out, due_dates, reason or receipt_gap(out)

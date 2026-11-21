@@ -67,6 +67,7 @@ core's Caddy would (see [Page and phone](#page-and-phone)).
 | `DMS_LANGUAGE`, `MISTRAL_API_KEY`, `DMS_PAGES_PER_MONTH` | – | Standalone stand-ins, see above |
 | `MISTRAL_OCR_MODEL` | `mistral-ocr-latest` | |
 | `DMS_INTERVAL_MIN` | `10` | How often the file stores are fetched (the first pass about 5 s after the start); `0` = only on `POST ki/sync` |
+| `DMS_ARCHIVE_DAYS` | `30` | A letter from a file store's first fetch dated more than this many days before the day it came in is only filed, see [Old letters](#old-letters-from-a-first-fetch); `0` = every letter is announced |
 
 ## Flow
 
@@ -77,8 +78,8 @@ file store / phone ─► intake ─► sha256 dedupe ─► page budget ─► 
 store ─► ki/wissen/* (company memory)   ki/ereignisse (cases)   ki/karten/* (dashboard)   functions (employees)
 ```
 
-Document status: `new`, `waiting` (page cap or no key; `reason` says which), `done`, `review` (a person must look),
-`error`. Kinds: `letter, notice, invoice, reminder, contract, court, attorney, advertising, other`. Actions:
+Document status: `new`, `waiting` (page cap or no key; `reason` says which), `done` (with reason `archive`: an old
+letter from a store's first fetch), `review` (a person must look), `error`. Kinds: `letter, notice, invoice, reminder, contract, court, attorney, advertising, other`. Actions:
 `pay, reply, object, deadline, none`. Due date kinds: `payment, tax, objection, reply, court, attorney, appointment,
 other`.
 
@@ -89,11 +90,31 @@ Fixed rules after Mistral's answer (`app/ocr.py: normalise`):
   document goes to `review` and no date is stored – never guessed. A court/attorney letter that demands something but
   shows no deadline goes to `review` as well;
 - an IBAN with a wrong checksum is dropped and the document goes to `review`;
+- an invoice or receipt (`is_receipt`) without an amount above zero, a sender or a valid date goes to `review` (reason
+  `receipt_no_amount`, `receipt_no_sender`, `receipt_no_date`) and sends no `receipt` event: the cockpit's receipt card
+  needs all three, and a receipt it cannot take would only end in its log;
 - advertising asks for nothing: no events, no due dates; it is still filed;
 - more than 8 pages: OCR without annotation (Mistral's limit), status `review`.
 
 Cases: documents with the same file number (Aktenzeichen, tax number, invoice number; normalised) share a `case_id`,
 so a reminder sits with its invoice and an objection with its notice.
+
+### Old letters from a first fetch
+
+A scanner folder often holds months of old scans when it is connected. They should be in the archive, not on the
+owner's desk. So a store's first fetch is marked: it lasts until everything that lay in the folder has come in once
+(more than 50 files take several passes), and starts again when the store points to another host, port or folder.
+A letter from it whose printed date is more than `DMS_ARCHIVE_DAYS` (default 30) before the day it came in is filed with
+status `done` and reason `archive`:
+
+- it is searchable, readable and in the company memory like any other letter, its case and due dates are kept, and due
+  dates still ahead show in `ki/due_dates` and on the card;
+- it sends no event at all: no `pay`, `reply`, `object`, `deadline`, `court`, `review`, `new_due_date` or `receipt`,
+  and it is never on the review list, whatever else is unclear in it.
+
+A letter without a recognised date is not clearly old and is handled as usual. Phone uploads and everything a store
+brings after its first fetch are always announced. Independently of that, a due date already past never becomes a
+`new_due_date` event.
 
 ## Contract
 
@@ -135,11 +156,11 @@ payment_reference, due_dates[], confidential, case_id, status, reason, owner_onl
 | art | When |
 |---|---|
 | `pay`, `reply`, `object`, `deadline` | The letter demands this; its due dates are in `data.due_dates` |
-| `new_due_date` | One per due date of a letter that demands nothing else (`data.due_date`) |
+| `new_due_date` | One per due date of a letter that demands nothing else (`data.due_date`), today or later; a day already past is stored but not announced |
 | `court` | Every court or attorney document, for the owner only |
 | `review` | Something is unclear (`data.reason`) |
-| `receipt` | Invoice or receipt for the bookkeeping (also besides `pay`) |
-| none | Advertising |
+| `receipt` | Invoice or receipt for the bookkeeping with sender, date and an amount above zero (also besides `pay`); without them the letter is on `review` |
+| none | Advertising; an old letter from a store's first fetch (reason `archive`) |
 
 The core takes at most 5 events per fetch and moves `seit` to the time of its fetch. So the DMS returns events not yet
 handed out first, then those newer than `seit`; ids repeat harmlessly (the core takes each id once).
@@ -158,7 +179,8 @@ second time.
 ### File stores
 
 They come only from the environment (`SCANNER_*`, see above), never through the API, and are read anew on every
-pass. The store keeps per store only its last error, the time of the last fetch and the SFTP host key: on first
+pass. The store keeps per store only its last error, the time of the last fetch, where its first fetch is over
+(`caught_up`: host, port and folder) and the SFTP host key: on first
 contact the key is trusted and kept for that host and port; if it changes, nothing is fetched and the error says so
 until the owner accepts the new key on the page. Unknown protocols (`smb`, `gdrive`, `onedrive`) answer "not supported
 yet". Version 0.1.0 kept pushed sources and the customer's key in the store; 0.2.0 deletes them on its first start.

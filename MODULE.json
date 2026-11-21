@@ -1,7 +1,7 @@
 {
   "standard": "vilikon.modul/1",
   "schluessel": "dms",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "name": "Post",
   "beschreibung": "Briefe, Bescheide und Belege aus der Ablage und vom Handy: gelesen, abgelegt, Fristen erkannt.",
   "menue": {
@@ -215,7 +215,7 @@
     {
       "art": "new_due_date",
       "titel": "Neue Frist",
-      "beschreibung": "Ein Brief nennt ein Datum (Fälligkeit, Vorauszahlung, Termin), ohne dass sonst etwas zu tun ist."
+      "beschreibung": "Ein Brief nennt ein Datum (Fälligkeit, Vorauszahlung, Termin), ohne dass sonst etwas zu tun ist. Nur Tage, die noch kommen."
     },
     {
       "art": "court",
@@ -225,12 +225,12 @@
     {
       "art": "review",
       "titel": "Brief prüfen",
-      "beschreibung": "Bei einem Brief ist etwas unklar, meist eine Frist. Ein Mensch muss nachsehen."
+      "beschreibung": "Bei einem Brief ist etwas unklar, meist eine Frist oder bei einem Beleg der Betrag. Ein Mensch muss nachsehen."
     },
     {
       "art": "receipt",
       "titel": "Beleg erkannt",
-      "beschreibung": "Eine Rechnung oder ein Beleg für die Buchhaltung."
+      "beschreibung": "Eine Rechnung oder ein Beleg für die Buchhaltung, mit Absender, Datum und Betrag."
     }
   ],
   "ereignisse_intervall_min": 5,

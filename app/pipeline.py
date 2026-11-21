@@ -1,7 +1,11 @@
 """From bytes to a filed document: dedupe by sha256 → page budget → OCR and annotation → rules → case → events.
 
 Status of a document: `new` (just in), `waiting` (page cap or no key; goes on by itself), `done`, `review` (a person
-must look: `reason` says why), `error` (OCR failed or too big; `reason`)."""
+must look: `reason` says why), `error` (OCR failed or too big; `reason`).
+
+The first fetch of a file store brings what lay there before (its backlog). A letter from it that is clearly old, dated
+more than `DMS_ARCHIVE_DAYS` before the day it came in, is filed as archive: status `done`, reason `archive`,
+searchable, but it announces nothing, so connecting a folder full of old scans does not flood the owner."""
 
 from __future__ import annotations
 
@@ -12,20 +16,22 @@ import os
 import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path
 
 from pypdf import PdfReader
 
-from app import budget, ocr
+from app import budget, config, ocr
 from app.intake import Adapter, HostKeyChanged, IntakeError, open_adapter
 from app.intake.env_sources import sources_from_env
-from app.store import Store
+from app.store import Store, today
 from app.texts import t
 
 log = logging.getLogger(__name__)
 
 ITEMS_PER_PASS = 50
 ACTION_EVENTS = ("pay", "reply", "object", "deadline")
+ARCHIVE = "archive"
 # The tools share 1 GB: one letter at a time is put together from photos (upload.to_pdf) or sent to the OCR as base64.
 HEAVY = threading.BoundedSemaphore(1)
 
@@ -45,14 +51,16 @@ def count_pages(name: str, data: bytes) -> int:
         return 1
 
 
-def receive(store: Store, name: str, data: bytes, source: str, who: str = "dms") -> Received:
-    """Take a document in. The same bytes twice (a scan and a photo of the same file, a second pass) are one document."""
+def receive(store: Store, name: str, data: bytes, source: str, who: str = "dms", *, backlog: bool = False) -> Received:
+    """Take a document in. The same bytes twice (a scan and a photo of the same file, a second pass) are one document.
+    `backlog`: it comes from a file store's first fetch."""
     sha = hashlib.sha256(data).hexdigest()
     found = store.by_sha(sha)
     if found:
         return Received(found, True)
     suffix = Path(name).suffix.lower() or ".pdf"
-    doc = store.add_document(sha=sha, name=name, source=source, suffix=suffix, data=data, pages=count_pages(name, data))
+    pages = count_pages(name, data)
+    doc = store.add_document(sha=sha, name=name, source=source, suffix=suffix, data=data, pages=pages, backlog=backlog)
     store.log(who, t("log.received", name=name, source=source))
     return Received(doc, False)
 
@@ -60,6 +68,14 @@ def receive(store: Store, name: str, data: bytes, source: str, who: str = "dms")
 def _set(store: Store, doc: dict, **fields) -> dict:
     store.update_document(doc["id"], **fields)
     return store.document(doc["id"]) or doc
+
+
+def archived(doc: dict, letter_date: str) -> bool:
+    """A letter from a file store's first fetch, dated more than `DMS_ARCHIVE_DAYS` before the day it came in."""
+    days = config.settings.archive_days
+    if not doc["backlog"] or days <= 0 or not letter_date:
+        return False
+    return date.fromisoformat(letter_date) < date.fromisoformat(doc["received_at"][:10]) - timedelta(days=days)
 
 
 def process(store: Store, doc: dict) -> dict:
@@ -81,6 +97,8 @@ def process(store: Store, doc: dict) -> dict:
     fields, due_dates, reason = ocr.normalise(reading.fields)
     if not reading.fields and doc["pages"] > ocr.ANNOTATION_MAX_PAGES:
         reason = "too_long"
+    if archived(doc, fields.get("date", "")):
+        reason = ARCHIVE  # whatever else is unclear in an old letter, nobody is asked about it
     case_id = store.case_for(fields.get("file_number", ""), fields.get("sender", ""))
     doc = _set(
         store,
@@ -88,7 +106,7 @@ def process(store: Store, doc: dict) -> dict:
         **fields,
         text=reading.text,
         pages=reading.pages,
-        status="review" if reason else "done",
+        status="done" if reason in ("", ARCHIVE) else "review",
         reason=reason,
         case_id=case_id,
     )
@@ -128,11 +146,14 @@ def _due_date_text(due_dates: list[dict]) -> str:
 
 
 def _events(store: Store, doc: dict, due_dates: list[dict]) -> None:
-    """Only what someone must do: each event becomes a case in the cockpit and, without a rule, costs a model run."""
-    if doc["kind"] == "advertising":
+    """Only what someone must do: each event becomes a case in the cockpit and, without a rule, costs a model run.
+    Advertising and an old letter from a file store's first fetch announce nothing; a day already past is no new due
+    date; a receipt goes to the bookkeeping only with sender, date and amount (else the letter is on review)."""
+    if doc["kind"] == "advertising" or doc["reason"] == ARCHIVE:
         return
     data, name = _data(doc, due_dates), title(doc)
-    reason = t(f"reason.{doc['reason']}") if doc["reason"] else ""
+    gap = ocr.receipt_gap(doc)
+    reason = " ".join(t(f"reason.{r}") for r in dict.fromkeys(r for r in (doc["reason"], gap) if r))
     if doc["kind"] in ocr.ALWAYS_CONFIDENTIAL:
         # Court and attorney post always ends with the owner, never at a rule's assignee.
         text = t("event.court_text", due_dates=_due_date_text(due_dates), reason=reason).strip()
@@ -153,7 +174,10 @@ def _events(store: Store, doc: dict, due_dates: list[dict]) -> None:
             data,
         )
     else:
+        day = today().isoformat()
         for i, d in enumerate(due_dates):
+            if d["date"] < day:
+                continue
             text = t("due." + d["kind"]) + (f": {d['text']}" if d["text"] else "")
             store.add_event(
                 f"{doc['id']}-{i}-due",
@@ -163,7 +187,7 @@ def _events(store: Store, doc: dict, due_dates: list[dict]) -> None:
                 doc["id"],
                 data | {"due_date": d},
             )
-    if doc["is_receipt"]:
+    if doc["is_receipt"] and not gap:
         store.add_event(
             f"{doc['id']}-receipt",
             "receipt",
@@ -195,6 +219,11 @@ def sources(environ: Mapping[str, str] | None = None) -> list[dict]:
 
 def _where(source: dict) -> str:
     return f"{source.get('host')}:{source.get('port') or ''}"
+
+
+def _place(source: dict) -> str:
+    """Host, port and folder: pointed at another folder, a store has a first fetch again."""
+    return _where(source) + (source.get("folder") or "")
 
 
 def connect(store: Store, source: dict) -> Adapter:
@@ -252,7 +281,8 @@ def source_list(store: Store, environ: Mapping[str, str] | None = None) -> list[
 
 
 def intake_pass(store: Store, environ: Mapping[str, str] | None = None) -> dict:
-    """Fetch what is new in every source, then read what the budget allows."""
+    """Fetch what is new in every source, then read what the budget allows. A source's first fetch lasts until all that
+    lay in its folder has come in once (more than ITEMS_PER_PASS take several passes); what it brings is `backlog`."""
     counts = {"new": 0, "duplicate": 0, "errors": 0}
     for source in sources(environ):
         try:
@@ -261,14 +291,17 @@ def intake_pass(store: Store, environ: Mapping[str, str] | None = None) -> dict:
             store.source_state(source["id"], str(e))
             counts["errors"] += 1
             continue
-        error = ""
+        error, place = "", _place(source)
+        first = (store.source_states().get(source["id"]) or {}).get("caught_up") != place
         try:
             todo = [i for i in adapter.list() if store.seen(source["id"], i.id) != i.version]
             for item in todo[:ITEMS_PER_PASS]:
-                got = receive(store, item.name, adapter.fetch(item), source=source["id"])
+                got = receive(store, item.name, adapter.fetch(item), source=source["id"], backlog=first)
                 adapter.mark_done(item)
                 store.mark_seen(source["id"], item.id, item.version)
                 counts["duplicate" if got.duplicate else "new"] += 1
+            if first and len(todo) <= ITEMS_PER_PASS:
+                store.set_caught_up(source["id"], place)
         except IntakeError as e:
             error = str(e)
         except Exception as e:  # a broken connection in the middle: try again next pass

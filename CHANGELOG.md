@@ -2,6 +2,15 @@
 
 ## Unveröffentlicht
 
+## 0.2.2
+
+- Wird ein Scanner-Ordner zum ersten Mal abgeholt, werden ältere Briefe, die schon dort lagen (mehr als 30 Tage vor dem
+  Abholen datiert), nur abgelegt: Sie sind auffindbar und ihre Fristen bleiben gespeichert, aber sie werden keine
+  Aufgaben und Vorgänge für den Inhaber mehr.
+- Ein Datum, das schon vorbei ist, wird keine neue Frist im Kalender mehr.
+- Erkennt Post bei einem Beleg den Betrag, den Absender oder das Datum nicht, steht der Brief jetzt auf „prüfen“ und
+  sagt, was fehlt. Bisher ging so ein Beleg still verloren, statt in der Buchhaltung anzukommen.
+
 ## 0.2.1
 
 - Liest Post einen Brief vom Handy nicht, sagt die Antwort jetzt, warum: etwa dass er mehr Seiten hat, als im

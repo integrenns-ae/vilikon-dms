@@ -1,7 +1,7 @@
 {
   "standard": "vilikon.modul/1",
   "schluessel": "dms",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "name": "Mail",
   "beschreibung": "Letters, notices and receipts from the file store and the phone: read, filed, due dates found.",
   "menue": {
@@ -215,7 +215,7 @@
     {
       "art": "new_due_date",
       "titel": "New due date",
-      "beschreibung": "A letter names a date (due date, advance payment, appointment) with nothing else to do."
+      "beschreibung": "A letter names a date (due date, advance payment, appointment) with nothing else to do. Only days still ahead."
     },
     {
       "art": "court",
@@ -225,12 +225,12 @@
     {
       "art": "review",
       "titel": "Check a letter",
-      "beschreibung": "Something about a letter is unclear, usually a due date. A person has to look."
+      "beschreibung": "Something about a letter is unclear, usually a due date or a receipt's amount. A person has to look."
     },
     {
       "art": "receipt",
       "titel": "Receipt found",
-      "beschreibung": "An invoice or receipt for the bookkeeping."
+      "beschreibung": "An invoice or receipt for the bookkeeping, with sender, date and amount."
     }
   ],
   "ereignisse_intervall_min": 5,

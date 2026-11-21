@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.2.2
+
+- When a scanner folder is fetched for the first time, older letters that already lay there (dated more than 30 days
+  before the fetch) are only filed: they can be found and their due dates are kept, but they no longer become tasks and
+  cases for the owner.
+- A date that has already passed no longer becomes a new due date in the calendar.
+- When Mail does not recognise a receipt's amount, sender or date, the letter is now marked “check” and says what is
+  missing. Until now such a receipt was silently lost instead of reaching the bookkeeping.
+
 ## 0.2.1
 
 - When Mail does not read a letter from the phone, the answer now says why: for example that it has more pages than

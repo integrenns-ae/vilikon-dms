@@ -52,6 +52,20 @@ def test_iban_is_checked():
     assert fields["iban"] == "" and reason == "iban_invalid"
 
 
+def test_a_receipt_needs_sender_date_and_amount():
+    assert ocr.normalise(BASE)[2] == ""
+    for gap, reason in (
+        ({"amount": None}, "receipt_no_amount"),
+        ({"amount": 0}, "receipt_no_amount"),
+        ({"amount": -5}, "receipt_no_amount"),
+        ({"sender": "  "}, "receipt_no_sender"),
+        ({"date": ""}, "receipt_no_date"),
+    ):
+        assert ocr.normalise(BASE | gap)[2] == reason, gap
+    assert ocr.normalise(BASE | {"amount": None, "is_receipt": False})[2] == ""
+    assert ocr.normalise(BASE | {"amount": None, "iban": "DE00"})[2] == "iban_invalid"  # the first reason stays
+
+
 def test_unknown_values_fall_back_and_nothing_is_nothing():
     fields, _, _ = ocr.normalise(BASE | {"kind": "fax", "action": "dance", "amount": "lots", "date": "yesterday"})
     assert (fields["kind"], fields["action"], fields["amount"], fields["date"]) == ("other", "none", None, "")

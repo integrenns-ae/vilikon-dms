@@ -4,7 +4,8 @@ What for: the company's paper mail. Letters, notices, invoices and court mail ar
 - `due_dates` shows what is due in the next days. Confidential letters appear there with kind and date only.
 - Letters from a court or an attorney are always confidential and go to the owner only.
 - If a letter is marked “check”, something is unclear, usually a due date: never name a date then, say that someone has to look at the letter.
-- For the bookkeeping, `receipt_data` gives a receipt's sender, number, amount, IBAN and payment reference.
+- For the bookkeeping, `receipt_data` gives a receipt's sender, number, amount, IBAN and payment reference. If a receipt's amount, sender or date was not recognised, it does not go to the bookkeeping as a receipt but is marked “check”.
+- Older letters that already lay in a scanner folder when it was first fetched are only filed: they can be found and their due dates are in `due_dates`, but no task comes from them.
 
 ## Setting it up (right “Set up the mail”, usually with the IT Specialist)
 

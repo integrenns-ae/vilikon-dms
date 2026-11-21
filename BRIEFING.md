@@ -4,7 +4,8 @@ Wofür: die Briefpost des Betriebs. Briefe, Bescheide, Rechnungen und Post vom G
 - `due_dates` zeigt, was in den nächsten Tagen fällig ist. Vertrauliche Briefe stehen dort nur mit Art und Datum.
 - Briefe vom Gericht oder Anwalt sind immer vertraulich und gehen nur an den Inhaber.
 - Steht ein Brief auf „prüfen“, ist etwas unklar, meist eine Frist: nenne dann nie ein Datum, sondern sag, dass jemand im Brief nachsehen muss.
-- Für die Buchhaltung liefert `receipt_data` Absender, Nummer, Betrag, IBAN und Verwendungszweck eines Belegs.
+- Für die Buchhaltung liefert `receipt_data` Absender, Nummer, Betrag, IBAN und Verwendungszweck eines Belegs. Wurde bei einem Beleg der Betrag, der Absender oder das Datum nicht erkannt, kommt er nicht als Beleg in die Buchhaltung, sondern steht auf „prüfen“.
+- Ältere Briefe, die beim ersten Abholen eines Scanner-Ordners schon dort lagen, werden nur abgelegt: Sie sind auffindbar, ihre Fristen stehen in `due_dates`, aber daraus entsteht keine Aufgabe.
 
 ## Einrichten (Recht „Post einrichten“, meist beim IT-Betreuer)
 

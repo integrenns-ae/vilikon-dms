@@ -32,7 +32,7 @@ from starlette.exceptions import HTTPException
 
 from app import VERSION, budget, config, pipeline
 from app import upload as upload_rules
-from app.store import Store
+from app.store import Store, today
 from app.texts import t
 from app.upload import UploadError, to_pdf
 
@@ -297,7 +297,7 @@ def due_dates(
 ) -> dict:
     """Every due date between from and to (default: today and the next 10 days). Confidential letters show only kind
     and date, so the Office Manager can name them in the morning briefing without reading them."""
-    start = since or date.today().isoformat()
+    start = since or today().isoformat()
     end = until or (date.fromisoformat(start) + timedelta(days=10)).isoformat()
     out = []
     for d in get_store().due_dates_between(start, end):
@@ -352,7 +352,7 @@ def receipt_file(doc_id: str, _: str = Depends(cockpit)) -> Response:
 def card_mail(_: str = Depends(cockpit)) -> dict:
     store = get_store()
     review = store.documents(status=("review",))
-    soon = store.due_dates_between(date.today().isoformat(), (date.today() + timedelta(days=10)).isoformat())
+    soon = store.due_dates_between(today().isoformat(), (today() + timedelta(days=10)).isoformat())
     lines = [{"text": pipeline.title(d)[:80], "wert": t("card.review")} for d in review[:4]]
     for d in soon[: 8 - len(lines)]:
         name = t("due.confidential") if d["confidential"] else (d["sender"] or d["subject"])

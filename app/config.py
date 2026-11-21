@@ -45,6 +45,9 @@ class Settings:
     )
     mistral_ocr_model: str = field(default_factory=lambda: _env("MISTRAL_OCR_MODEL", default="mistral-ocr-latest"))
     intake_interval_min: int = field(default_factory=lambda: _int("DMS_INTERVAL_MIN", default=10))
+    # A letter from a file store's first fetch dated more than this many days before it came in is only filed;
+    # 0 = every letter is announced.
+    archive_days: int = field(default_factory=lambda: max(0, _int("DMS_ARCHIVE_DAYS", default=30)))
 
     def __post_init__(self) -> None:
         if self.language not in ("de", "en"):

@@ -11,7 +11,7 @@ import re
 import sqlite3
 import threading
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 SCHEMA = """
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS documents (
     date TEXT NOT NULL DEFAULT '', file_number TEXT NOT NULL DEFAULT '', action TEXT NOT NULL DEFAULT '',
     amount REAL, iban TEXT NOT NULL DEFAULT '', payment_reference TEXT NOT NULL DEFAULT '',
     is_receipt INTEGER NOT NULL DEFAULT 0, confidential INTEGER NOT NULL DEFAULT 0,
-    text TEXT NOT NULL DEFAULT '', case_id TEXT
+    text TEXT NOT NULL DEFAULT '', case_id TEXT, backlog INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS due_dates (
     id TEXT PRIMARY KEY, document_id TEXT NOT NULL, kind TEXT NOT NULL, date TEXT NOT NULL, amount REAL,
@@ -39,10 +39,16 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE TABLE IF NOT EXISTS log (time TEXT NOT NULL, who TEXT NOT NULL, what TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS pages (month TEXT PRIMARY KEY, pages INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS source_state (id TEXT PRIMARY KEY, error TEXT NOT NULL DEFAULT '', last_fetch TEXT,
-    host_key_for TEXT NOT NULL DEFAULT '', host_key TEXT NOT NULL DEFAULT '', host_key_new TEXT NOT NULL DEFAULT '');
+    host_key_for TEXT NOT NULL DEFAULT '', host_key TEXT NOT NULL DEFAULT '', host_key_new TEXT NOT NULL DEFAULT '',
+    caught_up TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS intake_seen (source_id TEXT NOT NULL, item_id TEXT NOT NULL, version TEXT NOT NULL,
     PRIMARY KEY (source_id, item_id));
 """
+# Columns added after 0.2.1, for a database an older version made: table → [(column, definition)].
+ADDED = {
+    "documents": [("backlog", "INTEGER NOT NULL DEFAULT 0")],
+    "source_state": [("caught_up", "TEXT NOT NULL DEFAULT ''")],
+}
 
 DOCUMENT_FIELDS = (
     "kind",
@@ -68,6 +74,11 @@ def now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+def today() -> date:
+    """The day by the same clock as `now` (tests set it there)."""
+    return date.fromisoformat(now()[:10])
+
+
 def case_key(file_number: str) -> str:
     """„St.-Nr. 123/456/78901“ and „123 456 78901“ are the same case."""
     key = re.sub(r"[^0-9a-z]", "", file_number.lower())
@@ -85,7 +96,15 @@ class Store:
         with self.lock:
             self.db.execute("PRAGMA journal_mode=WAL")
             self.db.executescript(SCHEMA)
+            self._add_columns()
             self._forget_pushed_secrets()
+
+    def _add_columns(self) -> None:
+        for table, columns in ADDED.items():
+            have = {r["name"] for r in self.db.execute(f"PRAGMA table_info({table})")}
+            for name, definition in columns:
+                if name not in have:
+                    self.db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
     def _forget_pushed_secrets(self) -> None:
         """Up to 0.1 the cockpit pushed the file stores with their passwords (`PUT ki/sources`, table `sources`) and the
@@ -120,15 +139,18 @@ class Store:
     def document(self, doc_id: str) -> dict | None:
         return self._one("SELECT * FROM documents WHERE id = ?", doc_id)
 
-    def add_document(self, *, sha: str, name: str, source: str, suffix: str, data: bytes, pages: int) -> dict:
+    def add_document(
+        self, *, sha: str, name: str, source: str, suffix: str, data: bytes, pages: int, backlog: bool = False
+    ) -> dict:
+        """`backlog`: it lay in its file store before the DMS had fetched everything there once (app/pipeline.py)."""
         doc_id = uuid.uuid4().hex[:12]
         path = self.original_path(sha, suffix)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
         t = now()
         self._run(
-            "INSERT INTO documents (id, sha256, name, source, suffix, received_at, updated_at, pages, status) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new')",
+            "INSERT INTO documents (id, sha256, name, source, suffix, received_at, updated_at, pages, status, backlog) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)",
             doc_id,
             sha,
             name,
@@ -137,6 +159,7 @@ class Store:
             t,
             t,
             pages,
+            int(backlog),
         )
         return self.document(doc_id) or {}
 
@@ -294,6 +317,11 @@ class Store:
             key,
             source_id,
         )
+
+    def set_caught_up(self, source_id: str, where: str) -> None:
+        """Everything that lay in this store's folder has come in once: its first fetch is over, for this place."""
+        self._run("INSERT OR IGNORE INTO source_state (id) VALUES (?)", source_id)
+        self._run("UPDATE source_state SET caught_up = ? WHERE id = ?", where, source_id)
 
     def set_new_host_key(self, source_id: str, key: str) -> None:
         """The other key the server showed: not trusted until the owner accepts it."""

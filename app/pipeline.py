@@ -9,6 +9,7 @@ import hashlib
 import io
 import logging
 import os
+import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,8 @@ log = logging.getLogger(__name__)
 
 ITEMS_PER_PASS = 50
 ACTION_EVENTS = ("pay", "reply", "object", "deadline")
+# The tools share 1 GB: one letter at a time is put together from photos (upload.to_pdf) or sent to the OCR as base64.
+HEAVY = threading.BoundedSemaphore(1)
 
 
 @dataclass
@@ -69,7 +72,8 @@ def process(store: Store, doc: dict) -> dict:
     if not key or not budget.fits(store, doc["pages"]):
         return _set(store, doc, status="waiting", reason="no_key" if not key else "page_cap")
     try:
-        reading = ocr.read(doc["name"], store.original(doc), key, pages=doc["pages"])
+        with HEAVY:
+            reading = ocr.read(doc["name"], store.original(doc), key, pages=doc["pages"])
     except ocr.OcrError as e:
         log.warning("ocr failed for %s: %s", doc["id"], e)
         return _set(store, doc, status="error", reason="ocr")

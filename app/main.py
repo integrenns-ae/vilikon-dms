@@ -16,18 +16,22 @@ import hmac
 import html
 import json
 import logging
+import os
 import re
+import shutil
+import tempfile
 import threading
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from datetime import date, timedelta
+from typing import BinaryIO
 
 from fastapi import Depends, FastAPI, File, Query, Request, UploadFile
-from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.exceptions import HTTPException
 
 from app import VERSION, budget, config, pipeline
+from app import upload as upload_rules
 from app.store import Store
 from app.texts import t
 from app.upload import UploadError, to_pdf
@@ -39,6 +43,7 @@ MAX_CARD_LINES = 8
 FILED = ("done", "review")
 FIRST_PASS_S = 5.0  # after a start: the owner who just released the scanner sees its letters soon
 CHECK_TIMEOUT_S = 10
+UPLOAD_LIMIT = upload_rules.MAX_TOTAL + 1024 * 1024  # the photos and the form around them
 _store: Store | None = None
 _store_lock = threading.Lock()
 
@@ -91,16 +96,52 @@ def start_pass() -> bool:
     return True
 
 
+@contextmanager
+def _own_tmp():
+    """Temporary files (the spooled uploads above all) go below DATA_DIR, not into the /tmp all tools share."""
+    tmp = config.settings.data_dir.resolve() / "tmp"
+    shutil.rmtree(tmp, ignore_errors=True)  # what a crash left
+    tmp.mkdir(mode=0o700, parents=True)
+    before = os.environ.get("TMPDIR"), tempfile.tempdir
+    os.environ["TMPDIR"] = tempfile.tempdir = str(tmp)
+    try:
+        yield
+    finally:
+        if before[0] is None:
+            os.environ.pop("TMPDIR", None)
+        else:
+            os.environ["TMPDIR"] = before[0]
+        tempfile.tempdir = before[1]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     stop = threading.Event()
-    if config.settings.intake_interval_min > 0:
-        threading.Thread(target=_loop, args=(stop,), daemon=True, name="intake").start()
-    yield
-    stop.set()
+    with _own_tmp():
+        if config.settings.intake_interval_min > 0:
+            threading.Thread(target=_loop, args=(stop,), daemon=True, name="intake").start()
+        try:
+            yield
+        finally:
+            stop.set()
 
 
 app = FastAPI(title="vilikon-dms", version=VERSION, lifespan=lifespan, docs_url=None, redoc_url=None)
+
+
+@app.middleware("http")
+async def _upload_size(request: Request, call_next):
+    """A letter that is too big is refused before its body is spooled; to_pdf counts again for bodies without a
+    length."""
+    if request.url.path == "/api/upload":
+        try:
+            length = int(request.headers.get("content-length") or 0)
+        except ValueError:
+            length = 0
+        if length > UPLOAD_LIMIT:
+            text = t("upload.too_big_total", mb=upload_rules.MAX_TOTAL // (1024 * 1024))
+            return JSONResponse({"fehler": text}, status_code=413)
+    return await call_next(request)
 
 
 @app.exception_handler(Refusal)
@@ -514,17 +555,23 @@ def owner(request: Request, who: str = Depends(person)) -> str:
     return who
 
 
+def _assemble(files: list[tuple[str, BinaryIO]]) -> tuple[str, bytes]:
+    with pipeline.HEAVY:
+        return to_pdf(files)
+
+
 @app.post("/api/upload")
 async def upload(files: list[UploadFile] = File(...), who: str = Depends(person)) -> dict:
-    """The pages of one letter, photographed on the phone (or one PDF shared into Vilikon)."""
-    got_files = [(f.filename or "photo.jpg", await f.read()) for f in files]
+    """The pages of one letter, photographed on the phone (or one PDF shared into Vilikon). The photos stay in their
+    spool files (below DATA_DIR) until to_pdf reads them, one at a time."""
+    got_files = [(f.filename or "photo.jpg", f.file) for f in files]
     try:
-        name, data = to_pdf(got_files)
+        name, data = await asyncio.to_thread(_assemble, got_files)
     except UploadError as e:
         raise Refusal(400, str(e)) from e
     store = get_store()
-    got = await run_in_threadpool(pipeline.receive, store, name, data, "phone", who)
-    doc = got.document if got.duplicate else await run_in_threadpool(pipeline.process, store, got.document)
+    got = await asyncio.to_thread(pipeline.receive, store, name, data, "phone", who)
+    doc = got.document if got.duplicate else await asyncio.to_thread(pipeline.process, store, got.document)
     text = t("upload.duplicate") if got.duplicate else t(f"upload.status_{doc['status']}")
     return {"id": doc["id"], "duplicate": got.duplicate, "status": doc["status"], "text": text}
 

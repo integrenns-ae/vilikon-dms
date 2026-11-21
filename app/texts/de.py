@@ -118,6 +118,8 @@ TEXTS = {
     "upload.empty": "Es kam keine Datei an.",
     "upload.too_many": "Höchstens {n} Seiten auf einmal.",
     "upload.too_big": "Eine Datei ist größer als 20 MB.",
+    "upload.too_big_total": "Zusammen höchstens {mb} MB pro Brief.",
+    "upload.too_many_pixels": "„{name}“ hat mehr als {mp} Megapixel. Bitte mit kleinerer Auflösung fotografieren.",
     "upload.pdf_alone": "Ein PDF bitte allein schicken, nicht zusammen mit Fotos.",
     "upload.not_an_image": "„{name}“ ist kein Bild, das ich lesen kann (JPEG, PNG, WebP).",
     "upload.duplicate": "Diesen Brief gibt es schon.",

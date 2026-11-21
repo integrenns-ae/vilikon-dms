@@ -118,6 +118,8 @@ TEXTS = {
     "upload.empty": "No file arrived.",
     "upload.too_many": "At most {n} pages at once.",
     "upload.too_big": "A file is larger than 20 MB.",
+    "upload.too_big_total": "At most {mb} MB per letter altogether.",
+    "upload.too_many_pixels": "“{name}” has more than {mp} megapixels. Please take the photo at a lower resolution.",
     "upload.pdf_alone": "Please send a PDF on its own, not together with photos.",
     "upload.not_an_image": "“{name}” is not an image I can read (JPEG, PNG, WebP).",
     "upload.duplicate": "This letter is already here.",

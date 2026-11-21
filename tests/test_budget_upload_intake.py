@@ -1,13 +1,17 @@
 """Page cap and waiting queue, phone upload, file store adapters."""
 
 import io
+import os
+import tempfile
+import tracemalloc
 from datetime import UTC, datetime
 
 import pytest
 from conftest import HOST_KEY, browser, filestore, letter, photo, recorded
+from PIL import Image, ImageDraw
 from pypdf import PdfReader
 
-from app import budget, config, pipeline
+from app import budget, config, pipeline, upload
 from app.intake import IntakeError, sftp_ftp
 from app.intake.env_sources import sources_from_env
 
@@ -129,6 +133,80 @@ def test_a_shared_pdf_passes_as_it_is(client, mistral, store):
     pdf = letter(9)
     r = client.post("/api/upload", files=[("files", ("letter.pdf", pdf, "application/pdf"))], headers=LOGGED_IN)
     assert store.original(store.document(r.json()["id"])) == pdf
+
+
+def _live_blocks() -> int:
+    """Pillow's image memory, in blocks of 16 MB: tracemalloc does not see it."""
+    stats = Image.core.get_stats()
+    return stats["allocated_blocks"] - stats["freed_blocks"] - stats["blocks_cached"]
+
+
+def test_thirty_pages_are_put_together_one_at_a_time(monkeypatch):
+    out = io.BytesIO()
+    page = Image.new("L", (2000, 2800), 235)
+    ImageDraw.Draw(page).rectangle((200, 300, 1800, 2500), outline=20, width=12)
+    page.convert("RGB").save(out, format="JPEG", quality=80)
+    files = [(f"page{i}.jpg", io.BytesIO(out.getvalue())) for i in range(upload.MAX_PAGES)]
+    live, real = [], upload._page
+
+    def counted(name, f):
+        part = real(name, f)
+        live.append(_live_blocks())
+        return part
+
+    monkeypatch.setattr(upload, "_page", counted)
+    before = _live_blocks()
+    tracemalloc.start()
+    try:
+        name, pdf = upload.to_pdf(files)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert name == "scan.pdf" and len(PdfReader(io.BytesIO(pdf)).pages) == upload.MAX_PAGES
+    # No decoded page outlives its turn: all 30 at once took 720 MB, one at a time 80 MB (resident, measured).
+    assert set(live) == {before}
+    assert peak < 25 * 1024 * 1024, peak  # what Python holds: the pages as PDF and pypdf's objects, about 12 MB
+
+
+def test_a_turned_phone_photo_comes_out_upright_and_full_size():
+    out, exif = io.BytesIO(), Image.Exif()
+    exif[upload.ORIENTATION] = 6  # held upright, stored lying: 4000 × 3000
+    Image.new("RGB", (4000, 3000), (240, 240, 240)).save(out, format="JPEG", exif=exif)
+    _, pdf = upload.to_pdf([("upright.jpg", out)])
+    box = PdfReader(io.BytesIO(pdf)).pages[0].mediabox
+    assert (round(box.width / 72 * 200), round(box.height / 72 * 200)) == (2480, 3307)
+
+
+def test_a_letter_and_a_photo_have_limits(client, monkeypatch):
+    from app import main
+
+    big = io.BytesIO()
+    Image.new("L", (6400, 6400), 255).save(big, format="PNG")  # 41 megapixels, a small file
+    r = client.post("/api/upload", files=[("files", ("huge.png", big.getvalue(), "image/png"))], headers=LOGGED_IN)
+    assert r.status_code == 400 and r.json()["fehler"].startswith("„huge.png“ hat mehr als 40 Megapixel")
+    four = [("files", (f"p{i}.jpg", photo(i), "image/jpeg")) for i in range(4)]
+    with monkeypatch.context() as m:
+        m.setattr(upload, "MAX_TOTAL", 3 * len(photo(3)))
+        r = client.post("/api/upload", files=four, headers=LOGGED_IN)
+    assert r.status_code == 400 and r.json()["fehler"].startswith("Zusammen höchstens")
+    monkeypatch.setattr(main, "UPLOAD_LIMIT", 1000)  # refused by its Content-Length, before the body is read
+    r = client.post("/api/upload", files=four, headers=LOGGED_IN)
+    assert r.status_code == 413 and r.json() == {"fehler": "Zusammen höchstens 60 MB pro Brief."}
+
+
+def test_temporary_files_stay_in_the_data_dir(env, mistral):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    tmp = config.settings.data_dir.resolve() / "tmp"
+    tmp.mkdir(parents=True)
+    (tmp / "left-by-a-crash").write_bytes(b"x")
+    before = tempfile.gettempdir(), os.environ.get("TMPDIR")
+    with TestClient(app):
+        assert tempfile.gettempdir() == os.environ["TMPDIR"] == str(tmp)
+        assert list(tmp.iterdir()) == []
+    assert (tempfile.gettempdir(), os.environ.get("TMPDIR")) == before
 
 
 # --- intake adapters -------------------------------------------------------------------------------------------------

@@ -4,14 +4,14 @@ import io
 from datetime import UTC, datetime
 
 import pytest
-from conftest import HOST_KEY, filestore, letter, photo, recorded
+from conftest import HOST_KEY, browser, filestore, letter, photo, recorded
 from pypdf import PdfReader
 
 from app import budget, config, pipeline
 from app.intake import IntakeError, sftp_ftp
 from app.intake.env_sources import sources_from_env
 
-LOGGED_IN = {"X-Vilikon-Benutzer": "erika@example.com"}
+LOGGED_IN = browser()
 
 # --- budget ----------------------------------------------------------------------------------------------------------
 
@@ -111,8 +111,10 @@ def test_photos_become_one_pdf(client, mistral, store):
 
 
 def test_upload_needs_a_login(client):
-    r = client.post("/api/upload", files=[("files", ("a.jpg", photo(1), "image/jpeg"))])
-    assert r.status_code == 401 and r.json() == {"fehler": "Bitte im Cockpit anmelden."}
+    files = [("files", ("a.jpg", photo(1), "image/jpeg"))]
+    for headers in ({}, {"X-Vilikon-Benutzer": "erika@example.com"}, browser() | {"X-Vilikon-Token": "forged"}):
+        r = client.post("/api/upload", files=files, headers=headers)
+        assert r.status_code == 401 and r.json() == {"fehler": "Bitte im Cockpit anmelden."}
 
 
 def test_upload_refuses_what_is_not_an_image(client):

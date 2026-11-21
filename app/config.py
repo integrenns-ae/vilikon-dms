@@ -29,7 +29,9 @@ def _int(*names: str, default: int) -> int:
 @dataclass
 class Settings:
     data_dir: Path = field(default_factory=lambda: Path(os.environ.get("DATA_DIR", "data")))
-    # The cockpit sends it as `Authorization: Bearer …` on every ki/ call. Empty: every ki/ call is refused.
+    # The core sends the per-tool token as `X-Vilikon-Token`; standalone, `DMS_TOKEN` as `Authorization: Bearer …`.
+    # Both empty: everything but /health is refused.
+    vilikon_token: str = field(default_factory=lambda: os.environ.get("VILIKON_TOKEN", ""))
     token: str = field(default_factory=lambda: os.environ.get("DMS_TOKEN", ""))
     language: str = field(default_factory=lambda: _env("VILIKON_LANGUAGE", "DMS_LANGUAGE", default="de"))
     # The vault entry OCR (type api_key): the operator's Mistral key with OCR_BETREIBER=ja and a cap, or the

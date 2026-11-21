@@ -1,5 +1,9 @@
-"""The DMS service. Only the cockpit calls `ki/…`, with the service token (vilikon.modul/1, vilikon.wissen/1). People
-reach `/` and `/api/…` through Caddy at /modul/dms/, behind the cockpit's login. The DMS never calls the cockpit.
+"""The DMS service. Only the cockpit calls `ki/…`, with the tool's token (vilikon.modul/1, vilikon.wissen/1). People
+reach `/` and `/api/…` through the core at /werkzeug/<slug>/, behind the cockpit's login. The DMS never calls the
+cockpit.
+
+Every request but `/health` carries the token: as a Werkzeug `X-Vilikon-Token` (the Verwalter's `VILIKON_TOKEN`),
+standalone `Authorization: Bearer $DMS_TOKEN`. Without either configured, everything is refused.
 
 Keys and paths the core's standards define stay as they are there (`ki/modul`, `ki/ereignisse`, `ki/wissen/…`,
 `{"fehler": …}`, the card fields); everything else is the DMS's own and English."""
@@ -116,26 +120,30 @@ async def _invalid(request: Request, e: RequestValidationError) -> JSONResponse:
     return JSONResponse({"fehler": t("error.input", error=where)}, status_code=400)
 
 
+def _same(given: str, wanted: str) -> bool:
+    return bool(wanted) and hmac.compare_digest(given.encode(), wanted.encode())
+
+
 def _token_ok(request: Request) -> bool:
-    token = config.settings.token
-    given = request.headers.get("authorization", "")
-    return bool(token) and hmac.compare_digest(given.encode(), f"Bearer {token}".encode())
+    s = config.settings
+    return _same(request.headers.get("x-vilikon-token", ""), s.vilikon_token) or _same(
+        request.headers.get("authorization", ""), f"Bearer {s.token}" if s.token else ""
+    )
 
 
 def cockpit(request: Request) -> str:
-    """Every ki/ call: the service token, or nothing. Returns who asks (the employee, or `cockpit`)."""
+    """Every ki/ call: the token, or nothing. Returns who asks (the employee, or `cockpit`)."""
     if not _token_ok(request):
         raise Refusal(401, t("error.token"))
     return request.headers.get("x-vilikon-mitarbeiter") or "cockpit"
 
 
 def person(request: Request) -> str:
-    """The page and the phone upload, reached as /modul/dms/… through Caddy: the cockpit's forward_auth has checked the
-    login and sends the token with the user's email (`ki/` is never forwarded from the browser)."""
-    if _token_ok(request):
-        return request.headers.get("x-vilikon-benutzer") or "cockpit"
-    user = request.headers.get("x-vilikon-benutzer")
-    if not user:
+    """The page and the phone upload, reached through the core's /werkzeug/<slug>/: it has checked the login and sends
+    the token with the user's email (`X-Vilikon-Benutzer`), role and `X-Vilikon-Owner`. A user header without the
+    token counts for nothing. (`ki/` is never forwarded from the browser.)"""
+    user = request.headers.get("x-vilikon-benutzer", "").strip()
+    if not _token_ok(request) or not user:
         raise Refusal(401, t("error.login"))
     return user
 
@@ -487,7 +495,6 @@ def knowledge_file(id: str, _: str = Depends(cockpit)) -> PlainTextResponse:
 
 # --- page and phone --------------------------------------------------------------------------------------------------
 
-OWNER_ROLE = "kunde"  # the core's role of the owner; the operator (`betreiber`) sees no confidential letters
 PAGE_KEYS = (
     "module.name",
     "page.upload",
@@ -506,7 +513,9 @@ PAGE_KEYS = (
 
 
 def is_owner(request: Request) -> bool:
-    return request.headers.get("x-vilikon-rolle") == OWNER_ROLE
+    """The core says who the owner is; a role name says nothing (the owner who set Vilikon up has the role
+    `betreiber`). Only the owner sees confidential letters and the file stores."""
+    return request.headers.get("x-vilikon-owner", "").strip() == "1"
 
 
 def owner(request: Request, who: str = Depends(person)) -> str:

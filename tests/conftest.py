@@ -38,6 +38,17 @@ OCR = {"OCR_ART": "api_key", "OCR_SERVICE": "mistral", "OCR_PASSWORT": "operator
 OWN_PREFIXES = ("DMS_", "OCR_", "SCANNER", "VILIKON_", "MISTRAL_")
 
 
+def browser(user: str = "erika@example.com", *, owner: bool = False, role: str = "mitarbeiter") -> dict[str, str]:
+    """What the core adds to a page request after checking the login; what the browser sent there it drops. The owner
+    who set Vilikon up has the role `betreiber`: only `X-Vilikon-Owner` says who the owner is."""
+    return {
+        "X-Vilikon-Token": TOKEN,
+        "X-Vilikon-Benutzer": user,
+        "X-Vilikon-Rolle": role,
+        "X-Vilikon-Owner": str(int(owner)),
+    }
+
+
 def filestore(name: str = "SCANNER", **fields) -> dict[str, str]:
     """The variables of a released vault entry of type filestore: `filestore(FOLDER="/missing")`."""
     values = SCANNER | {k.upper(): str(v) for k, v in fields.items()}
@@ -171,7 +182,7 @@ class FakeFtp:
 
 
 class FakeCockpit:
-    """Calls the DMS the way the core does (backend/app/product_modules.py, module.py, knowledge_sources.py)."""
+    """Calls the DMS the way the core does (backend/app/tool_apps.py `call`, module.py, knowledge_sources.py)."""
 
     _NAME = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
     _PATH = re.compile(r"^ki(/[A-Za-z0-9_\-][A-Za-z0-9_.\-]*|/\{[a-z_][a-z0-9_]*\})*/?$")
@@ -185,7 +196,7 @@ class FakeCockpit:
 
     def headers(self, who: str = "cockpit") -> dict:
         return {
-            "Authorization": f"Bearer {self.token}",
+            "X-Vilikon-Token": self.token,
             "X-Vilikon-Mitarbeiter": who,
             "X-Vilikon-Benutzer": f"{who}@mitarbeiter",
             "X-Vilikon-Rolle": "mitarbeiter",
@@ -258,7 +269,7 @@ def env(tmp_path, monkeypatch):
     for k in list(os.environ):
         if k.startswith(OWN_PREFIXES) or k == "DATA_DIR":
             monkeypatch.delenv(k)
-    for k, v in (OCR | {"OCR_PAGES_PER_MONTH": "300", "DMS_INTERVAL_MIN": "0", "DMS_TOKEN": TOKEN}).items():
+    for k, v in (OCR | {"OCR_PAGES_PER_MONTH": "300", "DMS_INTERVAL_MIN": "0", "VILIKON_TOKEN": TOKEN}).items():
         monkeypatch.setenv(k, v)
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     config.reload()

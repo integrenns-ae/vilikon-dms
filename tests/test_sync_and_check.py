@@ -2,13 +2,13 @@
 
 import time
 
-from conftest import HOST_KEY, filestore
+from conftest import HOST_KEY, browser, filestore
 from fastapi.testclient import TestClient
 
 from app import main
 
-OWNER = {"X-Vilikon-Benutzer": "erika@example.com", "X-Vilikon-Rolle": "kunde"}
-COLLEAGUE = {"X-Vilikon-Benutzer": "max@example.com", "X-Vilikon-Rolle": "mitarbeiter"}
+OWNER = browser(owner=True, role="betreiber")
+COLLEAGUE = browser("max@example.com", role="kunde")  # a role name makes no owner
 
 
 def _wait_for_the_pass() -> None:

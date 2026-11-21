@@ -10,23 +10,21 @@ TEXTS = {
     "right.confidential_text": "May also read confidential letters: tax, salary, health, court and attorney.",
     "right.receipts_title": "See receipts",
     "right.receipts_text": "May fetch the data of invoices and receipts for the bookkeeping.",
+    "right.setup_title": "Set up the mail",
+    "right.setup_text": "May check whether the scanner's file stores and the text recognition work, and start fetching. Sees no letters doing so.",
     "function.search_documents": "Searches the incoming mail (without confidential letters) by words, kind and period.",
     "function.read_document": "Shows a letter with its full text, its due dates and the other letters of the same case.",
     "function.search_confidential_documents": "Searches all mail, confidential letters included.",
     "function.read_confidential_document": "Shows a letter, a confidential one too, with full text and due dates.",
     "function.due_dates": "Shows every due date and appointment from the mail in a period (without one: today and the next 10 days). Confidential ones only with kind and date.",
     "function.receipt_data": "Shows the data of a receipt: sender, date, number, amount, IBAN, payment reference.",
+    "function.sources_status": "Checks every file store (the scanner folder) with a quick look inside, and the text recognition: what is missing, what fails, how many pages were read this month.",
+    "function.sync_now": "Fetches the mail from every file store now, in the background. Afterwards sources_status shows whether it worked.",
     "parameter.query": "Words found in the sender, subject, file number or text",
     "parameter.kind": "letter, notice, invoice, reminder, contract, court, attorney, advertising or other",
     "parameter.from": "First day as YYYY-MM-DD",
     "parameter.to": "Last day as YYYY-MM-DD",
     "parameter.id": "The document's number",
-    "instruction": (
-        "The company's mail lies in the module “Mail”. search_documents finds letters by sender, subject, file number "
-        "or words in the text, read_document reads one in full. due_dates shows what is due in the next days. Letters "
-        "from a court or an attorney are always confidential and go to the owner only. If a letter is marked “check”, "
-        "something is unclear (usually a due date): never name a date then, say that someone has to look."
-    ),
     # kinds, actions, due dates
     "kind.letter": "Letter",
     "kind.notice": "Notice",

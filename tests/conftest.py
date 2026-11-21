@@ -9,7 +9,6 @@ import hashlib
 import io
 import json
 import os
-import re
 import stat
 from pathlib import Path
 from types import SimpleNamespace
@@ -184,9 +183,6 @@ class FakeFtp:
 class FakeCockpit:
     """Calls the DMS the way the core does (backend/app/tool_apps.py `call`, module.py, knowledge_sources.py)."""
 
-    _NAME = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
-    _PATH = re.compile(r"^ki(/[A-Za-z0-9_\-][A-Za-z0-9_.\-]*|/\{[a-z_][a-z0-9_]*\})*/?$")
-
     def __init__(self, client: TestClient, token: str = TOKEN) -> None:
         self.client = client
         self.token = token
@@ -249,19 +245,6 @@ class FakeCockpit:
                 "pfad": f["pfad"],
             }
         return self.memory
-
-    def check_module(self, modul: dict) -> None:
-        """The parts of the core's MODUL.json check (module.py) the DMS could get wrong."""
-        assert modul["standard"] == "vilikon.modul/1" and self._NAME.match(modul["schluessel"])
-        rights = {r["key"] for r in modul["rechte"]}
-        for f in modul["funktionen"]:
-            assert self._NAME.match(f["name"]) and f["recht"] in rights and self._PATH.match(f["pfad"]), f
-            assert f["methode"] in ("GET", "POST", "PUT", "PATCH")
-        for e in modul["ereignisse"]:
-            assert self._NAME.match(e["art"]) and 0 < len(e["titel"]) <= 80 and len(e["beschreibung"]) <= 300, e
-        assert len(modul["karten"]) <= 2
-        for k in modul["karten"]:
-            assert self._PATH.match(k["pfad"]) and "{" not in k["pfad"]
 
 
 @pytest.fixture

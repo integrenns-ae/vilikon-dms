@@ -10,24 +10,21 @@ TEXTS = {
     "right.confidential_text": "Darf auch vertrauliche Briefe lesen: Steuer, Gehalt, Gesundheit, Gericht und Anwalt.",
     "right.receipts_title": "Belege einsehen",
     "right.receipts_text": "Darf die Daten von Rechnungen und Belegen für die Buchhaltung abrufen.",
+    "right.setup_title": "Post einrichten",
+    "right.setup_text": "Darf prüfen, ob die Scanner-Ablagen und die Texterkennung gehen, und das Abholen anstoßen. Sieht dabei keine Briefe.",
     "function.search_documents": "Sucht in der eingegangenen Post (ohne vertrauliche Briefe) nach Wörtern, Art und Zeitraum.",
     "function.read_document": "Zeigt einen Brief mit seinem ganzen Text, seinen Fristen und den anderen Briefen desselben Vorgangs.",
     "function.search_confidential_documents": "Sucht in der ganzen Post, auch in vertraulichen Briefen.",
     "function.read_confidential_document": "Zeigt einen Brief, auch einen vertraulichen, mit ganzem Text und Fristen.",
     "function.due_dates": "Zeigt alle Fristen und Termine aus der Post in einem Zeitraum (ohne Angabe: heute und die nächsten 10 Tage). Vertrauliche nur mit Art und Datum.",
     "function.receipt_data": "Zeigt die Daten eines Belegs: Absender, Datum, Nummer, Betrag, IBAN, Verwendungszweck.",
+    "function.sources_status": "Prüft jede Ablage (den Scanner-Ordner) mit einem kurzen Blick hinein und die Texterkennung: was fehlt, was nicht geht, wie viele Seiten diesen Monat gelesen sind.",
+    "function.sync_now": "Holt die Post jetzt aus allen Ablagen ab, im Hintergrund. Ob es geklappt hat, zeigt danach sources_status.",
     "parameter.query": "Wörter, die im Absender, Betreff, Aktenzeichen oder Text vorkommen",
     "parameter.kind": "letter, notice, invoice, reminder, contract, court, attorney, advertising oder other",
     "parameter.from": "Erster Tag als JJJJ-MM-TT",
     "parameter.to": "Letzter Tag als JJJJ-MM-TT",
     "parameter.id": "Die Nummer des Dokuments",
-    "instruction": (
-        "Die Post des Betriebs liegt im Modul „Post“. Mit search_documents findest du Briefe nach Absender, Betreff, "
-        "Aktenzeichen oder Wörtern im Text, mit read_document liest du einen ganz. due_dates zeigt, was in den "
-        "nächsten Tagen fällig ist. Briefe vom Gericht oder Anwalt sind immer vertraulich und gehen nur an den "
-        "Inhaber. Steht ein Brief auf „prüfen“, ist etwas unklar (meist eine Frist): nenne dann nie ein Datum, sondern "
-        "sag, dass jemand nachsehen muss."
-    ),
     # kinds, actions, due dates
     "kind.letter": "Brief",
     "kind.notice": "Bescheid",

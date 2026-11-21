@@ -1,0 +1,43 @@
+{
+  "standard": "vilikon.adapter/1",
+  "slug": "dms",
+  "version": "0.2.0",
+  "build": "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+  "start": ".venv/bin/python -m app",
+  "check": "ki/pruefen",
+  "setup": {
+    "de": "Post liest Briefe mit Texterkennung, legt sie nach Vorgang ab und erkennt Fristen. Damit Briefe vom Scanner von selbst kommen, muss der Scanner (oder das NAS, auf das er scannt) in einen SFTP- oder FTPS-Ordner schreiben, der aus dem Internet erreichbar ist: Vilikon holt dort von außen ab und kommt nicht ins Firmennetz. Steht das NAS hinter einem Router, braucht es dort eine Portweiterleitung (SFTP meist Port 22, FTPS Port 21) oder ein VPN. Die Zugangsdaten kommen als Tresor-Eintrag der Art Dateiablage. Ohne Scanner geht es auch: Hochladen vom Handy, als Fotos oder als PDF, funktioniert immer. Für die Texterkennung stellt der Betreiber seinen Schlüssel mit einer festen Zahl von Seiten pro Monat; darüber warten Briefe bis zum nächsten Monat. Ein eigener Mistral-Schlüssel hebt die Grenze auf, die Seiten gehen dann auf die eigene Rechnung.",
+    "en": "Mail reads letters with text recognition, files them by case and finds due dates. For letters from the scanner to come in by themselves, the scanner (or the NAS it scans to) must write into an SFTP or FTPS folder reachable from the internet: Vilikon fetches from there from outside and never enters the company network. If the NAS sits behind a router, it needs port forwarding there (SFTP usually port 22, FTPS port 21) or a VPN. The credentials come as a vault entry of type file store. It works without a scanner, too: uploading from the phone, as photos or as a PDF, always works. For text recognition the operator provides their key with a set number of pages per month; beyond that, letters wait for the next month. An own Mistral key lifts the cap, the pages then go on one's own bill."
+  },
+  "languages": {
+    "en": {
+      "MODULE.json": "vilikon/en/MODULE.json",
+      "BRIEFING.md": "vilikon/en/BRIEFING.md"
+    }
+  },
+  "credentials": [
+    {
+      "name": "OCR",
+      "art": "tresor",
+      "typ": "api_key",
+      "operator": "mistral",
+      "label": {"de": "Schlüssel für die Texterkennung (Mistral)", "en": "Key for text recognition (Mistral)"},
+      "help": {
+        "de": "Der Betreiber stellt seinen Mistral-Schlüssel mit einer festen Zahl von Seiten pro Monat. Wer mehr liest, hinterlegt einen eigenen Mistral-Schlüssel: dann ohne Grenze, auf eigene Rechnung.",
+        "en": "The operator provides their Mistral key with a set number of pages per month. Who reads more stores an own Mistral key: then without a cap, on one's own bill."
+      },
+      "url": "https://console.mistral.ai/api-keys"
+    },
+    {
+      "name": "SCANNER",
+      "art": "tresor",
+      "typ": "filestore",
+      "optional": true,
+      "label": {"de": "Scanner-Ordner (SFTP oder FTPS)", "en": "Scanner folder (SFTP or FTPS)"},
+      "help": {
+        "de": "Der Ordner, in den der Scanner oder das NAS die Briefe legt, aus dem Internet erreichbar. Weitere Ordner als SCANNER2, SCANNER3 … Leer lassen, wenn Post nur vom Handy kommt.",
+        "en": "The folder the scanner or the NAS puts the letters into, reachable from the internet. More folders as SCANNER2, SCANNER3 … Leave it empty if mail comes only from the phone."
+      }
+    }
+  ]
+}

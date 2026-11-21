@@ -1,0 +1,254 @@
+{
+  "standard": "vilikon.modul/1",
+  "schluessel": "dms",
+  "version": "0.1.0",
+  "name": "Post",
+  "beschreibung": "Briefe, Bescheide und Belege aus der Ablage und vom Handy: gelesen, abgelegt, Fristen erkannt.",
+  "menue": {
+    "titel": "Post",
+    "symbol": "FileText"
+  },
+  "rechte": [
+    {
+      "key": "read",
+      "titel": "Post einsehen",
+      "beschreibung": "Darf eingegangene Briefe suchen und lesen, außer vertraulichen, und sieht die Fristen.",
+      "sensibel": false
+    },
+    {
+      "key": "confidential",
+      "titel": "Vertrauliche Post einsehen",
+      "beschreibung": "Darf auch vertrauliche Briefe lesen: Steuer, Gehalt, Gesundheit, Gericht und Anwalt.",
+      "sensibel": true
+    },
+    {
+      "key": "receipts",
+      "titel": "Belege einsehen",
+      "beschreibung": "Darf die Daten von Rechnungen und Belegen für die Buchhaltung abrufen.",
+      "sensibel": false
+    },
+    {
+      "key": "setup",
+      "titel": "Post einrichten",
+      "beschreibung": "Darf prüfen, ob die Scanner-Ablagen und die Texterkennung gehen, und das Abholen anstoßen. Sieht dabei keine Briefe.",
+      "sensibel": true
+    }
+  ],
+  "funktionen": [
+    {
+      "name": "search_documents",
+      "beschreibung": "Sucht in der eingegangenen Post (ohne vertrauliche Briefe) nach Wörtern, Art und Zeitraum.",
+      "recht": "read",
+      "methode": "GET",
+      "pfad": "ki/documents",
+      "parameter": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Wörter, die im Absender, Betreff, Aktenzeichen oder Text vorkommen"
+          },
+          "kind": {
+            "type": "string",
+            "description": "letter, notice, invoice, reminder, contract, court, attorney, advertising oder other"
+          },
+          "from": {
+            "type": "string",
+            "description": "Erster Tag als JJJJ-MM-TT"
+          },
+          "to": {
+            "type": "string",
+            "description": "Letzter Tag als JJJJ-MM-TT"
+          }
+        }
+      }
+    },
+    {
+      "name": "read_document",
+      "beschreibung": "Zeigt einen Brief mit seinem ganzen Text, seinen Fristen und den anderen Briefen desselben Vorgangs.",
+      "recht": "read",
+      "methode": "GET",
+      "pfad": "ki/documents/{id}",
+      "parameter": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Die Nummer des Dokuments"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "search_confidential_documents",
+      "beschreibung": "Sucht in der ganzen Post, auch in vertraulichen Briefen.",
+      "recht": "confidential",
+      "methode": "GET",
+      "pfad": "ki/confidential/documents",
+      "parameter": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Wörter, die im Absender, Betreff, Aktenzeichen oder Text vorkommen"
+          },
+          "kind": {
+            "type": "string",
+            "description": "letter, notice, invoice, reminder, contract, court, attorney, advertising oder other"
+          },
+          "from": {
+            "type": "string",
+            "description": "Erster Tag als JJJJ-MM-TT"
+          },
+          "to": {
+            "type": "string",
+            "description": "Letzter Tag als JJJJ-MM-TT"
+          }
+        }
+      }
+    },
+    {
+      "name": "read_confidential_document",
+      "beschreibung": "Zeigt einen Brief, auch einen vertraulichen, mit ganzem Text und Fristen.",
+      "recht": "confidential",
+      "methode": "GET",
+      "pfad": "ki/confidential/documents/{id}",
+      "parameter": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Die Nummer des Dokuments"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "due_dates",
+      "beschreibung": "Zeigt alle Fristen und Termine aus der Post in einem Zeitraum (ohne Angabe: heute und die nächsten 10 Tage). Vertrauliche nur mit Art und Datum.",
+      "recht": "read",
+      "methode": "GET",
+      "pfad": "ki/due_dates",
+      "parameter": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Erster Tag als JJJJ-MM-TT"
+          },
+          "to": {
+            "type": "string",
+            "description": "Letzter Tag als JJJJ-MM-TT"
+          }
+        }
+      }
+    },
+    {
+      "name": "receipt_data",
+      "beschreibung": "Zeigt die Daten eines Belegs: Absender, Datum, Nummer, Betrag, IBAN, Verwendungszweck.",
+      "recht": "receipts",
+      "methode": "GET",
+      "pfad": "ki/receipts/{id}",
+      "parameter": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Die Nummer des Dokuments"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "sources_status",
+      "beschreibung": "Prüft jede Ablage (den Scanner-Ordner) mit einem kurzen Blick hinein und die Texterkennung: was fehlt, was nicht geht, wie viele Seiten diesen Monat gelesen sind.",
+      "recht": "setup",
+      "methode": "GET",
+      "pfad": "ki/pruefen",
+      "parameter": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "sync_now",
+      "beschreibung": "Holt die Post jetzt aus allen Ablagen ab, im Hintergrund. Ob es geklappt hat, zeigt danach sources_status.",
+      "recht": "setup",
+      "methode": "POST",
+      "pfad": "ki/sync",
+      "parameter": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "ereignisse": [
+    {
+      "art": "pay",
+      "titel": "Zahlung verlangt",
+      "beschreibung": "Eine Rechnung, Mahnung oder ein Bescheid verlangt eine Zahlung."
+    },
+    {
+      "art": "reply",
+      "titel": "Antwort verlangt",
+      "beschreibung": "Ein Brief verlangt eine Antwort."
+    },
+    {
+      "art": "object",
+      "titel": "Widerspruch möglich",
+      "beschreibung": "Ein Bescheid oder Brief, gegen den man fristgerecht Einspruch oder Widerspruch einlegen kann."
+    },
+    {
+      "art": "deadline",
+      "titel": "Termin einhalten",
+      "beschreibung": "Ein Brief setzt einen Termin, der eingehalten werden muss."
+    },
+    {
+      "art": "new_due_date",
+      "titel": "Neue Frist",
+      "beschreibung": "Ein Brief nennt ein Datum (Fälligkeit, Vorauszahlung, Termin), ohne dass sonst etwas zu tun ist."
+    },
+    {
+      "art": "court",
+      "titel": "Post vom Gericht oder Anwalt",
+      "beschreibung": "Immer vertraulich und immer für den Inhaber, nie an jemand anderen weitergegeben."
+    },
+    {
+      "art": "review",
+      "titel": "Brief prüfen",
+      "beschreibung": "Bei einem Brief ist etwas unklar, meist eine Frist. Ein Mensch muss nachsehen."
+    },
+    {
+      "art": "receipt",
+      "titel": "Beleg erkannt",
+      "beschreibung": "Eine Rechnung oder ein Beleg für die Buchhaltung."
+    }
+  ],
+  "ereignisse_intervall_min": 5,
+  "karten": [
+    {
+      "titel": "Post",
+      "pfad": "ki/karten/mail"
+    },
+    {
+      "titel": "Post: Seiten",
+      "pfad": "ki/karten/pages"
+    }
+  ],
+  "anschluesse": [
+    {
+      "standard": "vilikon.wissen/1",
+      "name": "Post",
+      "intervall_min": 15
+    }
+  ]
+}

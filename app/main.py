@@ -5,8 +5,9 @@ cockpit.
 Every request but `/health` carries the token: as a Werkzeug `X-Vilikon-Token` (the Verwalter's `VILIKON_TOKEN`),
 standalone `Authorization: Bearer $DMS_TOKEN`. Without either configured, everything is refused.
 
-Keys and paths the core's standards define stay as they are there (`ki/modul`, `ki/ereignisse`, `ki/wissen/…`,
-`{"fehler": …}`, the card fields); everything else is the DMS's own and English."""
+What the DMS brings to the cockpit (rights, functions, events, cards) the core reads from MODULE.json and BRIEFING.md in
+the released repository (app/module.py). Keys and paths the core's standards define stay as they are there
+(`ki/ereignisse`, `ki/wissen/…`, `{"fehler": …}`, the card fields); everything else is the DMS's own and English."""
 
 from __future__ import annotations
 
@@ -27,7 +28,6 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Res
 from starlette.exceptions import HTTPException
 
 from app import VERSION, budget, config, pipeline
-from app.module import describe
 from app.store import Store
 from app.texts import t
 from app.upload import UploadError, to_pdf
@@ -154,16 +154,6 @@ def health() -> dict:
 
 
 # --- vilikon.modul/1 -------------------------------------------------------------------------------------------------
-
-
-@app.get("/ki/modul")
-def module(_: str = Depends(cockpit)) -> dict:
-    return describe()
-
-
-@app.get("/ki/anleitung", response_class=PlainTextResponse)
-def instruction(_: str = Depends(cockpit)) -> str:
-    return t("instruction")
 
 
 @app.get("/ki/protokoll")

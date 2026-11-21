@@ -54,30 +54,6 @@ def test_health_needs_no_token(client):
     assert client.get("/health").json()["ok"] is True
 
 
-def test_module_description_passes_the_cores_check(cockpit):
-    modul = cockpit.get("ki/modul").json()
-    cockpit.check_module(modul)
-    assert modul["schluessel"] == "dms"
-    assert modul["menue"] == {"titel": "Post", "symbol": "FileText"}
-    assert modul["anschluesse"] == [{"standard": "vilikon.wissen/1", "name": "Post", "intervall_min": 15}]
-    assert {f["name"] for f in modul["funktionen"]} >= {"search_documents", "due_dates", "receipt_data"}
-    # every function path and every card answers (no 404 for a path the module announces)
-    for f in modul["funktionen"]:
-        r = cockpit.get(f["pfad"].replace("{id}", "unknown"))
-        assert r.status_code in (200, 404) and r.json() != {"fehler": "Diesen Pfad gibt es nicht."}, f["pfad"]
-    for k in modul["karten"]:
-        assert cockpit.get(k["pfad"]).status_code == 200
-    assert "search_documents" in cockpit.get("ki/anleitung").text
-
-
-def test_module_in_english(cockpit, monkeypatch):
-    monkeypatch.setattr(config.settings, "language", "en")
-    modul = cockpit.get("ki/modul").json()
-    cockpit.check_module(modul)
-    assert modul["name"] == "Mail"
-    assert cockpit.get("ki/documents/x").json() == {"fehler": "This document does not exist."}
-
-
 def test_errors_are_plain_words(cockpit):
     assert cockpit.get("ki/missing").json() == {"fehler": "Diesen Pfad gibt es nicht."}
     # file stores come from the vault through the environment; nothing pushes them any more

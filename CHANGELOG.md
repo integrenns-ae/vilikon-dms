@@ -2,6 +2,25 @@
 
 ## Unveröffentlicht
 
+## 0.2.0
+
+- Post ist jetzt ein Werkzeug: Der IT-Betreuer installiert es aus dem Katalog, ohne eigenen Container.
+- Zugangsdaten kommen aus dem Tresor: der Scanner-Ordner als Eintrag `SCANNER` der Art Dateiablage (weitere als
+  `SCANNER2` …), der Schlüssel für die Texterkennung als Eintrag `OCR`. Post speichert selbst keine Passwörter mehr und
+  löscht beim ersten Start, was frühere Versionen gespeichert hatten.
+- Der Schlüssel des Betreibers hat eine feste Zahl von Seiten pro Monat. Ein eigener Mistral-Schlüssel hat keine
+  Grenze.
+- Neues Recht „Post einrichten“: Wer es hat, sieht, ob jede Ablage antwortet und die Texterkennung einen Schlüssel hat,
+  und kann sofort abholen lassen.
+- Abgeholt wird im Hintergrund, das erste Mal wenige Sekunden nach dem Start. Die Karte „Post: Seiten“ zeigt, welche Ablage
+  gerade nicht antwortet.
+- Auf der Seite „Post“ sieht der Inhaber die Ablagen und kann sofort abholen.
+- SFTP-Ablagen werden an ihrem Schlüssel erkannt. Zeigt der Server plötzlich einen anderen, holt Post nichts mehr ab,
+  bis der Inhaber den neuen Schlüssel auf der Seite annimmt.
+- Vertrauliche Briefe sieht nur der Inhaber; das prüft Post jetzt richtig.
+- Fotos vom Handy brauchen viel weniger Speicher: Die Seiten werden einzeln zusammengesetzt. Höchstens 60 MB pro Brief
+  und 40 Megapixel pro Foto.
+
 ## 0.1.0
 
 - Post aus der Ablage: Der Scanner legt Briefe in einen SFTP- oder FTP-Ordner, das Modul holt sie ab, liest sie mit

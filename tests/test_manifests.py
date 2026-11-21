@@ -149,6 +149,19 @@ def test_adapter_manifest():
     assert (scanner["name"], scanner["typ"], scanner["optional"]) == ("SCANNER", "filestore", True)
 
 
+def test_one_version_everywhere():
+    from app import VERSION
+
+    assert ADAPTER["version"] == VERSION == (ROOT / "VERSION").read_text().strip()
+    for path in module.FILES.values():
+        assert json.loads(path.read_text(encoding="utf-8"))["version"] == VERSION
+    heads = {}
+    for name in ("CHANGELOG.md", "CHANGELOG.en.md"):
+        heads[name] = re.findall(r"^## (.+)$", (ROOT / name).read_text(encoding="utf-8"), re.M)
+        assert VERSION in heads[name], name
+    assert heads["CHANGELOG.md"][1:] == heads["CHANGELOG.en.md"][1:]  # after „Unveröffentlicht“ / "Unreleased"
+
+
 def test_the_credentials_are_what_the_dms_reads(vault):
     from conftest import filestore
 

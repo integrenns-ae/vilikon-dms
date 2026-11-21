@@ -1,18 +1,17 @@
-FROM python:3.12-slim
+# Standalone image. As a Vilikon Werkzeug the DMS is not built from this file: the Verwalter runs ADAPTER.json's build
+# and start in its own image (Debian, Python 3.11, pip). Both install the same requirements.txt.
+FROM python:3.11-slim
 
-COPY --from=ghcr.io/astral-sh/uv:0.13.7 /uv /usr/local/bin/uv
 WORKDIR /srv
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/srv/.venv PATH="/srv/.venv/bin:$PATH"
+COPY requirements.txt ./
+RUN python -m venv /srv/.venv && /srv/.venv/bin/pip install --no-cache-dir -r requirements.txt
 
-COPY pyproject.toml uv.lock VERSION ./
-RUN uv sync --frozen --no-dev --no-install-project
-
+COPY VERSION ./
 COPY app ./app
-RUN uv sync --frozen --no-dev
 
 RUN useradd --system --uid 10001 dms && mkdir -p /data && chown dms /data
 USER dms
-ENV DATA_DIR=/data PORT=8090
+ENV PATH="/srv/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 DATA_DIR=/data HOST=0.0.0.0 PORT=8090
 EXPOSE 8090
 HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request,os; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"PORT\"]}/health')"
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --proxy-headers"]
+CMD ["python", "-m", "app"]

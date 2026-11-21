@@ -99,6 +99,7 @@ TEXTS = {
     "card.pages_text": "Seiten in diesem Monat gelesen",
     "card.this_month": "Diesen Monat",
     "card.waiting": "Warten auf den nächsten Monat",
+    "card.source_error": "Fehler",
     # knowledge file
     "knowledge.folder": "Post",
     "field.kind": "Art",
@@ -115,7 +116,7 @@ TEXTS = {
     "intake.no_connection": "Keine Verbindung zur {kind}-Ablage ({error}). Stimmen Adresse, Benutzer und Passwort?",
     "intake.folder_missing": "Den Ordner „{folder}“ gibt es in der Ablage nicht.",
     "intake.broken_off": "Die Verbindung zur Ablage ist abgebrochen ({error}). Nächster Versuch beim nächsten Abgleich.",
-    "intake.host_key_changed": "Der SFTP-Server {host} zeigt einen anderen Schlüssel als beim ersten Mal. Aus Vorsicht wird nichts abgeholt und kein Passwort gesendet.",
+    "intake.host_key_changed": "Der SFTP-Server {host} zeigt einen anderen Schlüssel als beim ersten Mal. Aus Vorsicht wird nichts abgeholt und kein Passwort gesendet. Wurde der Server neu eingerichtet, kann der Inhaber den neuen Schlüssel auf der Seite „Post“ annehmen.",
     # upload
     "upload.empty": "Es kam keine Datei an.",
     "upload.too_many": "Höchstens {n} Seiten auf einmal.",
@@ -131,11 +132,25 @@ TEXTS = {
     # log
     "log.received": "„{name}“ eingegangen ({source})",
     "log.read": "Gelesen: {title} ({kind})",
+    "log.host_key_accepted": "Neuen Schlüssel des SFTP-Servers für „{source}“ angenommen",
+    # fetching and the check
+    "sync.started": "Die Ablagen werden jetzt im Hintergrund abgeholt. Ob es geklappt hat, zeigt in einer Minute die Prüfung.",
+    "sync.running": "Die Ablagen werden gerade schon abgeholt.",
+    "check.ocr_operator": "Texterkennung mit dem Schlüssel des Betreibers: {used} von {cap} Seiten in diesem Monat gelesen.",
+    "check.ocr_own": "Texterkennung mit dem eigenen Mistral-Schlüssel, ohne Seitengrenze ({used} Seiten in diesem Monat).",
+    "check.no_key": "Für die Texterkennung fehlt der Schlüssel (Tresor-Eintrag OCR): Briefe warten, bis er freigegeben ist.",
+    "check.wrong_service": "Der Schlüssel im Tresor-Eintrag OCR ist für „{service}“; lesen kann das Modul nur mit Mistral.",
+    "check.no_sources": "Kein Scanner-Ordner angeschlossen: Post kommt nur über das Hochladen vom Handy.",
+    "check.sources_ok": "Alle Ablagen antworten ({n}).",
+    "check.source_failed": "Ablage {id}: {error}",
+    "check.timeout": "Die Ablage hat nicht innerhalb von {seconds} Sekunden geantwortet.",
     # errors
     "error.token": "Nur das Cockpit darf das Modul aufrufen.",
     "error.login": "Bitte im Cockpit anmelden.",
     "error.no_document": "Dieses Dokument gibt es nicht.",
     "error.no_receipt": "Diesen Beleg gibt es nicht.",
+    "error.not_owner": "Das darf nur der Inhaber.",
+    "error.no_new_host_key": "Für diese Ablage gibt es keinen neuen Schlüssel zum Annehmen.",
     "error.path": "Diesen Pfad gibt es nicht.",
     "error.input": "Die Angaben passen nicht: {error}",
     # page
@@ -147,4 +162,9 @@ TEXTS = {
     "page.confidential": "vertraulich",
     "page.pages": "Seiten diesen Monat",
     "page.reading": "Wird gelesen …",
+    "page.sources": "Ablagen",
+    "page.fetch": "Jetzt abholen",
+    "page.trust": "Neuen Schlüssel annehmen",
+    "page.trusted": "Der neue Schlüssel gilt. Die Ablage wird jetzt abgeholt.",
+    "page.never_fetched": "noch nicht abgeholt",
 }

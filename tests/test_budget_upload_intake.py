@@ -16,9 +16,9 @@ LOGGED_IN = {"X-Vilikon-Benutzer": "erika@example.com"}
 # --- budget ----------------------------------------------------------------------------------------------------------
 
 
-def test_at_the_cap_documents_wait_and_go_on_next_month(cockpit, scanner, store, monkeypatch):
+def test_at_the_cap_documents_wait_and_go_on_next_month(cockpit, scanner, store, monkeypatch, fetch):
     monkeypatch.setattr(config.settings, "pages_per_month", 2)
-    counts = cockpit.sync_now()
+    counts = fetch()
     # scan_001 (1 page) is read, scan_002 (2 pages) would pass the cap: it and everything after it wait, in order
     assert counts["read"] == 1
     assert [d["status"] for d in store.documents()] == ["done", "waiting", "waiting"]
@@ -37,10 +37,10 @@ def test_at_the_cap_documents_wait_and_go_on_next_month(cockpit, scanner, store,
     assert [d["status"] for d in store.documents()] == ["done", "done", "waiting"]
 
 
-def test_a_customers_own_key_has_no_cap(cockpit, scanner, mistral, vault):
+def test_a_customers_own_key_has_no_cap(cockpit, scanner, mistral, vault, fetch):
     # the customer's own vault entry: the same type, without OCR_BETREIBER and without a cap
     vault(OCR_PASSWORT="customer-key", OCR_BETREIBER=None, OCR_PAGES_PER_MONTH="1")
-    assert cockpit.sync_now()["read"] == 3
+    assert fetch()["read"] == 3
     assert mistral.requests[-1]["_auth"] == "Bearer customer-key"
     pages = cockpit.get("ki/pages").json()
     assert pages["cap"] is None and pages["own_key"] is True
@@ -65,9 +65,9 @@ def test_where_the_key_and_the_cap_come_from(env, vault):
     assert budget.api_key() == ""  # only Mistral reads letters
 
 
-def test_without_any_key_documents_wait(cockpit, scanner, store, vault):
+def test_without_any_key_documents_wait(cockpit, scanner, store, vault, fetch):
     vault(OCR_PASSWORT=None)
-    cockpit.sync_now()
+    fetch()
     assert {(d["status"], d["reason"]) for d in store.documents()} == {("waiting", "no_key")}
 
 
@@ -158,9 +158,9 @@ def test_sources_from_the_environment():
     assert (found["archive"]["kind"], found["archive"]["tls"], found["archive"]["port"]) == ("ftp", False, 2121)
 
 
-def test_sftp_moves_done_files_when_the_source_says_so(cockpit, scanner, vault):
+def test_sftp_moves_done_files_when_the_source_says_so(cockpit, scanner, vault, fetch):
     vault(SCANNER_MOVE_DONE="true")
-    cockpit.sync_now()
+    fetch()
     assert sorted(p.name for p in (scanner.folder / "done").iterdir()) == [
         "scan_001.pdf",
         "scan_002.pdf",
@@ -169,26 +169,26 @@ def test_sftp_moves_done_files_when_the_source_says_so(cockpit, scanner, vault):
     assert sorted(p.name for p in scanner.folder.iterdir() if p.is_file()) == [".hidden.pdf", "note.txt"]
 
 
-def test_sftp_leaves_the_store_alone_by_default(cockpit, scanner):
-    cockpit.sync_now()
+def test_sftp_leaves_the_store_alone_by_default(cockpit, scanner, fetch):
+    fetch()
     assert not (scanner.folder / "done").exists()
 
 
-def test_ftp(cockpit, scanner, vault):
+def test_ftp(cockpit, scanner, vault, fetch):
     vault(dict.fromkeys(filestore()))
     vault(filestore("SCANNER2", PROTOCOL="ftp", HOST="ftp.example.com", FOLDER="post", MOVE_DONE="1"))
-    counts = cockpit.sync_now()
+    counts = fetch()
     assert counts["new"] == 3 and counts["errors"] == 0
     assert [s["id"] for s in counts["sources"]] == ["scanner2"]
     assert scanner.sources[-1]["tls"] is False
     assert len(list((scanner.folder / "done").iterdir())) == 3
 
 
-def test_missing_folder_and_stores_not_yet_supported(cockpit, scanner, vault):
+def test_missing_folder_and_stores_not_yet_supported(cockpit, scanner, vault, fetch):
     vault(SCANNER_FOLDER="/missing")
     vault(filestore("SCANNER2", PROTOCOL="gdrive"), **filestore("SCANNER3", PROTOCOL="smb"))
     vault(filestore("SCANNER4", PROTOCOL=""))
-    counts = cockpit.sync_now()
+    counts = fetch()
     assert counts["errors"] == 4
     state = {s["id"]: s["error"] for s in counts["sources"]}
     assert state["scanner"] == "Den Ordner „/missing“ gibt es in der Ablage nicht."
@@ -197,25 +197,25 @@ def test_missing_folder_and_stores_not_yet_supported(cockpit, scanner, vault):
     assert state["scanner4"] == "Diese Art von Ablage kenne ich nicht: ?."
 
 
-def test_a_failed_login_names_no_password(cockpit, scanner, vault):
+def test_a_failed_login_names_no_password(cockpit, scanner, vault, fetch):
     vault(SCANNER_PASSWORT="wrong")
-    error = cockpit.sync_now()["sources"][0]["error"]
+    error = fetch()["sources"][0]["error"]
     assert error.startswith("Keine Verbindung zur SFTP-Ablage (AssertionError)") and "wrong" not in error
 
 
-def test_the_sftp_host_key_is_trusted_on_first_use(cockpit, scanner, store, vault):
-    assert cockpit.sync_now()["new"] == 3
+def test_the_sftp_host_key_is_trusted_on_first_use(cockpit, scanner, store, vault, fetch):
+    assert fetch()["new"] == 3
     assert scanner.sources[-1]["host_key"] == ""  # the first time nothing is known
     assert store.source_states()["scanner"]["host_key"] == HOST_KEY
     (scanner.folder / "scan_004.pdf").write_bytes(letter(40))
     scanner.host_key = "ssh-ed25519 SHA256:someone-else"
-    counts = cockpit.sync_now()
+    counts = fetch()
     assert counts["new"] == 0 and counts["errors"] == 1
     assert counts["sources"][0]["error"].startswith("Der SFTP-Server nas.example.com zeigt einen anderen Schlüssel")
     assert store.source_states()["scanner"]["host_key"] == HOST_KEY
     # another host (the owner changed the vault entry) is trusted anew
     vault(SCANNER_HOST="nas2.example.com")
-    assert cockpit.sync_now()["new"] == 1
+    assert fetch()["new"] == 1
     assert store.source_states()["scanner"]["host_key"] == "ssh-ed25519 SHA256:someone-else"
 
 

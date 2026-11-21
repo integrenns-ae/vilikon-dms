@@ -16,7 +16,7 @@ import socket
 import stat
 
 from app import ocr
-from app.intake import IntakeError, Item
+from app.intake import HostKeyChanged, IntakeError, Item
 from app.texts import t
 
 MAX_BYTES = 20 * 1024 * 1024
@@ -40,7 +40,7 @@ def _sftp_connect(source: dict):
         transport.start_client(timeout=TIMEOUT_S)
         seen = fingerprint(transport.get_remote_server_key())
         if source.get("host_key") and seen != source["host_key"]:
-            raise IntakeError(t("intake.host_key_changed", host=source["host"]))
+            raise HostKeyChanged(t("intake.host_key_changed", host=source["host"]), seen)
         transport.auth_password(source.get("user", ""), source.get("password", ""))
         return paramiko.SFTPClient.from_transport(transport), seen
     except BaseException:

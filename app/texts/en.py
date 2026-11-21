@@ -98,6 +98,7 @@ TEXTS = {
     "card.pages_text": "pages read this month",
     "card.this_month": "This month",
     "card.waiting": "Waiting for next month",
+    "card.source_error": "error",
     # knowledge file
     "knowledge.folder": "Mail",
     "field.kind": "Kind",
@@ -114,7 +115,7 @@ TEXTS = {
     "intake.no_connection": "No connection to the {kind} store ({error}). Are address, user and password right?",
     "intake.folder_missing": "The folder “{folder}” does not exist in the file store.",
     "intake.broken_off": "The connection to the file store broke off ({error}). Next try at the next sync.",
-    "intake.host_key_changed": "The SFTP server {host} shows a different key than the first time. To be safe, nothing is fetched and no password is sent.",
+    "intake.host_key_changed": "The SFTP server {host} shows a different key than the first time. To be safe, nothing is fetched and no password is sent. If the server was set up anew, the owner can accept the new key on the “Mail” page.",
     # upload
     "upload.empty": "No file arrived.",
     "upload.too_many": "At most {n} pages at once.",
@@ -130,11 +131,25 @@ TEXTS = {
     # log
     "log.received": "“{name}” arrived ({source})",
     "log.read": "Read: {title} ({kind})",
+    "log.host_key_accepted": "Accepted the SFTP server's new key for “{source}”",
+    # fetching and the check
+    "sync.started": "The file stores are being fetched in the background. In a minute the check shows whether it worked.",
+    "sync.running": "The file stores are being fetched already.",
+    "check.ocr_operator": "Text recognition with the operator's key: {used} of {cap} pages read this month.",
+    "check.ocr_own": "Text recognition with the own Mistral key, without a page cap ({used} pages this month).",
+    "check.no_key": "The key for text recognition is missing (vault entry OCR): letters wait until it is released.",
+    "check.wrong_service": "The key in the vault entry OCR is for “{service}”; the module can only read with Mistral.",
+    "check.no_sources": "No scanner folder connected: mail comes in only by uploading from the phone.",
+    "check.sources_ok": "Every file store answers ({n}).",
+    "check.source_failed": "File store {id}: {error}",
+    "check.timeout": "The file store did not answer within {seconds} seconds.",
     # errors
     "error.token": "Only the cockpit may call this module.",
     "error.login": "Please sign in to the cockpit.",
     "error.no_document": "This document does not exist.",
     "error.no_receipt": "This receipt does not exist.",
+    "error.not_owner": "Only the owner may do this.",
+    "error.no_new_host_key": "There is no new key to accept for this file store.",
     "error.path": "This path does not exist.",
     "error.input": "The input does not fit: {error}",
     # page
@@ -146,4 +161,9 @@ TEXTS = {
     "page.confidential": "confidential",
     "page.pages": "Pages this month",
     "page.reading": "Reading …",
+    "page.sources": "File stores",
+    "page.fetch": "Fetch now",
+    "page.trust": "Accept the new key",
+    "page.trusted": "The new key counts now. The file store is being fetched.",
+    "page.never_fetched": "not fetched yet",
 }

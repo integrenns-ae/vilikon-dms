@@ -30,6 +30,14 @@ class IntakeError(Exception):
     """Said in plain words: it ends on the source's status in the cockpit."""
 
 
+class HostKeyChanged(IntakeError):
+    """The SFTP server shows another key than the trusted one; `seen` is that key, for the owner to accept."""
+
+    def __init__(self, text: str, seen: str) -> None:
+        super().__init__(text)
+        self.seen = seen
+
+
 class Adapter(Protocol):
     host_key: str
 

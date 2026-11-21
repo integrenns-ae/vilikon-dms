@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE TABLE IF NOT EXISTS log (time TEXT NOT NULL, who TEXT NOT NULL, what TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS pages (month TEXT PRIMARY KEY, pages INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS source_state (id TEXT PRIMARY KEY, error TEXT NOT NULL DEFAULT '', last_fetch TEXT,
-    host_key_for TEXT NOT NULL DEFAULT '', host_key TEXT NOT NULL DEFAULT '');
+    host_key_for TEXT NOT NULL DEFAULT '', host_key TEXT NOT NULL DEFAULT '', host_key_new TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS intake_seen (source_id TEXT NOT NULL, item_id TEXT NOT NULL, version TEXT NOT NULL,
     PRIMARY KEY (source_id, item_id));
 """
@@ -288,7 +288,26 @@ class Store:
     def set_host_key(self, source_id: str, where: str, key: str) -> None:
         """The SFTP server's key, trusted on first use, for this host and port."""
         self._run("INSERT OR IGNORE INTO source_state (id) VALUES (?)", source_id)
-        self._run("UPDATE source_state SET host_key_for = ?, host_key = ? WHERE id = ?", where, key, source_id)
+        self._run(
+            "UPDATE source_state SET host_key_for = ?, host_key = ?, host_key_new = '' WHERE id = ?",
+            where,
+            key,
+            source_id,
+        )
+
+    def set_new_host_key(self, source_id: str, key: str) -> None:
+        """The other key the server showed: not trusted until the owner accepts it."""
+        self._run("UPDATE source_state SET host_key_new = ? WHERE id = ?", key, source_id)
+
+    def accept_host_key(self, source_id: str) -> bool:
+        with self.lock:
+            row = self._one("SELECT host_key_new FROM source_state WHERE id = ?", source_id)
+            if not row or not row["host_key_new"]:
+                return False
+            self._run(
+                "UPDATE source_state SET host_key = host_key_new, host_key_new = '', error = '' WHERE id = ?", source_id
+            )
+            return True
 
     def seen(self, source_id: str, item_id: str) -> str | None:
         row = self._one("SELECT version FROM intake_seen WHERE source_id = ? AND item_id = ?", source_id, item_id)

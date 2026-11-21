@@ -6,6 +6,7 @@ Keys and paths the core's standards define stay as they are there (`ki/modul`, `
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import html
 import json
@@ -30,7 +31,10 @@ from app.upload import UploadError, to_pdf
 log = logging.getLogger(__name__)
 
 MAX_EVENTS = 5  # the cockpit takes at most this many per fetch
+MAX_CARD_LINES = 8
 FILED = ("done", "review")
+FIRST_PASS_S = 5.0  # after a start: the owner who just released the scanner sees its letters soon
+CHECK_TIMEOUT_S = 10
 _store: Store | None = None
 _store_lock = threading.Lock()
 
@@ -48,12 +52,39 @@ class Refusal(Exception):
         self.status, self.text = status, text
 
 
+# One pass over the file stores at a time, whether the loop or `POST ki/sync` starts it.
+pass_lock = threading.Lock()
+
+
+def _pass() -> None:
+    """The caller holds `pass_lock`."""
+    try:
+        pipeline.intake_pass(get_store())
+    except Exception:
+        log.exception("intake pass failed")
+
+
 def _loop(stop: threading.Event) -> None:
-    while not stop.wait(max(1, config.settings.intake_interval_min) * 60):
+    wait = FIRST_PASS_S
+    while not stop.wait(wait):
+        with pass_lock:
+            _pass()
+        wait = max(1, config.settings.intake_interval_min) * 60
+
+
+def start_pass() -> bool:
+    """A pass in a thread of its own; False when one is running already."""
+    if not pass_lock.acquire(blocking=False):
+        return False
+
+    def run() -> None:
         try:
-            pipeline.intake_pass(get_store())
-        except Exception:
-            log.exception("intake pass failed")
+            _pass()
+        finally:
+            pass_lock.release()
+
+    threading.Thread(target=run, daemon=True, name="sync").start()
+    return True
 
 
 @asynccontextmanager
@@ -293,14 +324,20 @@ def card_mail(_: str = Depends(cockpit)) -> dict:
 
 @app.get("/ki/karten/pages")
 def card_pages(_: str = Depends(cockpit)) -> dict:
-    s = budget.state(get_store())
+    """Pages this month, waiting letters, and one line per file store that failed last time (stored, no live check:
+    the core waits 5 s for a card)."""
+    store = get_store()
+    s = budget.state(store)
     lines = [{"text": t("card.this_month"), "wert": f"{s['pages']} / {s['cap'] or '∞'}"}]
     if s["waiting"]:
         lines.append({"text": t("card.waiting"), "wert": str(s["waiting"])})
+    failing = [x for x in pipeline.source_list(store) if x["error"]]
+    for x in failing[: MAX_CARD_LINES - len(lines)]:
+        lines.append({"text": f"{x['id']}: {x['error']}"[:120], "wert": t("card.source_error")})
     return {
         "zahl": str(s["pages"]),
         "text": t("card.pages_text"),
-        "ton": "warn" if s["waiting"] else "neutral",
+        "ton": "kritisch" if failing else ("warn" if s["waiting"] else "neutral"),
         "zeilen": lines,
     }
 
@@ -314,12 +351,72 @@ def pages(_: str = Depends(cockpit)) -> dict:
 # --- file stores ----------------------------------------------------------------------------------------------------
 
 
-@app.post("/ki/sync")
+@app.post("/ki/sync", status_code=202)
 def sync_now(_: str = Depends(cockpit)) -> dict:
-    """Fetch from the file stores now. They come from the environment (the vault entries released for the DMS)."""
+    """Fetch from the file stores now, in the background: the core's call gives up after 60 s, a pass can take longer.
+    `ki/pruefen` shows afterwards what came of it."""
+    started = start_pass()
+    return {"status": "started" if started else "running", "text": t("sync.started" if started else "sync.running")}
+
+
+async def _check(store: Store, source: dict) -> str:
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(pipeline.check_source, store, source), CHECK_TIMEOUT_S)
+    except TimeoutError:
+        error = t("check.timeout", seconds=CHECK_TIMEOUT_S)
+        store.source_state(source["id"], error, fetched=False)
+        return error
+
+
+def _check_text(rows: list[dict], ocr: dict) -> str:
+    if ocr["ok"]:
+        key = t("check.ocr_operator", used=ocr["pages_used"], cap=ocr["cap"] or "∞") if ocr["operator"] else ""
+        parts = [key or t("check.ocr_own", used=ocr["pages_used"])]
+    elif budget.wrong_service():
+        parts = [t("check.wrong_service", service=config.settings.ocr_service)]
+    else:
+        parts = [t("check.no_key")]
+    failing = [r for r in rows if not r["ok"]]
+    if not rows:
+        parts.append(t("check.no_sources"))
+    elif not failing:
+        parts.append(t("check.sources_ok", n=len(rows)))
+    parts += [t("check.source_failed", id=r["id"], error=r["error"]) for r in failing]
+    return " ".join(parts)
+
+
+@app.get("/ki/pruefen")
+async def check(_: str = Depends(cockpit)) -> dict:
+    """For the IT Specialist after setting it up: does every file store answer (a quick look into its folder, at most
+    10 s each, all at once), is there an OCR key, how many pages are left."""
     store = get_store()
-    counts = pipeline.intake_pass(store)
-    return counts | {"sources": pipeline.source_list(store)}
+    sources = pipeline.sources()
+    errors = await asyncio.gather(*(_check(store, x) for x in sources))
+    fetched = {x["id"]: x["last_fetch"] for x in pipeline.source_list(store)}
+    rows = [
+        {
+            "id": x["id"],
+            "protocol": x["protocol"],
+            "host": x["host"],
+            "ok": not error,
+            "error": error,
+            "last_fetch": fetched.get(x["id"]),
+        }
+        for x, error in zip(sources, errors, strict=True)
+    ]
+    pages = budget.state(store)
+    ocr = {
+        "ok": bool(budget.api_key()),
+        "operator": budget.operator(),
+        "pages_used": pages["pages"],
+        "cap": pages["cap"],
+    }
+    return {
+        "ok": ocr["ok"] and all(r["ok"] for r in rows),
+        "text": _check_text(rows, ocr),
+        "sources": rows,
+        "ocr": ocr,
+    }
 
 
 # --- vilikon.wissen/1 ------------------------------------------------------------------------------------------------
@@ -401,7 +498,21 @@ PAGE_KEYS = (
     "page.confidential",
     "page.pages",
     "page.reading",
+    "page.sources",
+    "page.fetch",
+    "page.trust",
+    "page.never_fetched",
 )
+
+
+def is_owner(request: Request) -> bool:
+    return request.headers.get("x-vilikon-rolle") == OWNER_ROLE
+
+
+def owner(request: Request, who: str = Depends(person)) -> str:
+    if not is_owner(request):
+        raise Refusal(403, t("error.not_owner"))
+    return who
 
 
 @app.post("/api/upload")
@@ -421,10 +532,11 @@ async def upload(files: list[UploadFile] = File(...), who: str = Depends(person)
 
 @app.get("/api/documents")
 def page_documents(request: Request, who: str = Depends(person)) -> dict:
-    """What the page shows: the latest 50 letters and the review list; confidential ones only for the owner."""
-    owner = request.headers.get("x-vilikon-rolle") == OWNER_ROLE
+    """What the page shows: the latest 50 letters and the review list; confidential ones and the file stores only for
+    the owner."""
+    is_it = is_owner(request)
     store = get_store()
-    docs = [d for d in reversed(store.documents()) if owner or not d["confidential"]]
+    docs = [d for d in reversed(store.documents()) if is_it or not d["confidential"]]
     rows = [
         _row(d) | {"title": pipeline.title(d), "kind_text": t(f"kind.{d['kind']}") if d["kind"] else ""} for d in docs
     ]
@@ -432,7 +544,26 @@ def page_documents(request: Request, who: str = Depends(person)) -> dict:
         "review": [r for r in rows if r["status"] == "review"],
         "documents": rows[:50],
         "pages": budget.state(store),
+        "owner": is_it,
+        "sources": pipeline.source_list(store) if is_it else [],
     }
+
+
+@app.post("/api/sync")
+def page_sync(who: str = Depends(owner)) -> dict:
+    """The owner's "Fetch now"."""
+    return {"text": t("sync.started" if start_pass() else "sync.running")}
+
+
+@app.post("/api/sources/{source_id}/trust")
+def trust_host_key(source_id: str, who: str = Depends(owner)) -> dict:
+    """The owner accepts the new key an SFTP server showed (it was set up anew); then it is fetched again."""
+    store = get_store()
+    if source_id not in {x["id"] for x in pipeline.sources()} or not store.accept_host_key(source_id):
+        raise Refusal(404, t("error.no_new_host_key"))
+    store.log(who, t("log.host_key_accepted", source=source_id))
+    start_pass()
+    return {"text": t("page.trusted")}
 
 
 PAGE = """<!doctype html><html lang="{lang}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -442,13 +573,23 @@ li{{margin:6px 0}}small{{opacity:.7}}button{{font-size:1rem;padding:8px 14px}}</
 <h1>{title}</h1><form id="f"><label>{upload}<br><input type="file" name="files" accept="image/*,application/pdf"
 capture="environment" multiple required></label> <button>{send}</button><p id="m" role="status"></p></form>
 <h2>{review}</h2><ul id="p"></ul><h2>{inbox}</h2><ul id="d"></ul><p><small id="s"></small></p>
+<section id="o" hidden><h2>{sources}</h2><ul id="q"></ul><button id="g" type="button">{fetch}</button>
+<p id="r" role="status"></p></section>
 <script>const T={texts};
 function li(r){{const e=document.createElement("li");e.textContent=r.date+" · "+(r.kind_text?r.kind_text+" · ":"")+r.title+
 (r.confidential?" ("+T["page.confidential"]+")":"")+(r.reason?" – "+r.reason:"");return e}}
 function fill(id,rows){{const u=document.getElementById(id);u.replaceChildren(...rows.map(li));
 if(!rows.length){{const e=document.createElement("li");e.textContent=T["page.empty"];u.append(e)}}}}
+function say(d){{document.getElementById("r").textContent=d.text||d.fehler}}
+function post(path){{fetch(path,{{method:"POST"}}).then(r=>r.json()).then(d=>{{say(d);setTimeout(load,3000)}})}}
+function source(x){{const e=document.createElement("li");e.textContent=x.id+" ("+x.protocol+" "+x.host+"): "+
+(x.error||(x.last_fetch?x.last_fetch.slice(0,16).replace("T"," "):T["page.never_fetched"]));if(x.host_key_new){{
+const b=document.createElement("button");b.type="button";b.textContent=T["page.trust"];b.title=x.host_key_new;
+b.onclick=()=>post("api/sources/"+encodeURIComponent(x.id)+"/trust");e.append(" ",b)}}return e}}
 function load(){{fetch("api/documents").then(r=>r.json()).then(d=>{{fill("p",d.review);fill("d",d.documents);
-document.getElementById("s").textContent=T["page.pages"]+": "+d.pages.pages+" / "+(d.pages.cap||"∞")}})}}
+document.getElementById("s").textContent=T["page.pages"]+": "+d.pages.pages+" / "+(d.pages.cap||"∞");
+document.getElementById("o").hidden=!d.owner;document.getElementById("q").replaceChildren(...d.sources.map(source))}})}}
+document.getElementById("g").onclick=()=>post("api/sync");
 document.getElementById("f").onsubmit=e=>{{e.preventDefault();const m=document.getElementById("m");m.textContent=T["page.reading"];
 fetch("api/upload",{{method:"POST",body:new FormData(e.target)}}).then(r=>r.json()).then(d=>{{m.textContent=d.text||d.fehler;
 e.target.reset();load()}})}};load()</script></html>"""
@@ -456,7 +597,8 @@ e.target.reset();load()}})}};load()</script></html>"""
 
 @app.get("/", response_class=HTMLResponse)
 def page(_: str = Depends(person)) -> str:
-    """Inbox, the review list and the phone upload. Relative links: the page lives under /modul/dms/."""
+    """Inbox, the review list and the phone upload; for the owner also the file stores and "Fetch now". Relative links:
+    the page lives under the core's prefix."""
     texts = json.dumps({k: t(k) for k in PAGE_KEYS}, ensure_ascii=False).replace("<", "\\u003c")
-    esc = {k: html.escape(t(f"page.{k}")) for k in ("upload", "send", "review", "inbox")}
+    esc = {k: html.escape(t(f"page.{k}")) for k in ("upload", "send", "review", "inbox", "sources", "fetch")}
     return PAGE.format(lang=config.settings.language, title=html.escape(t("module.name")), texts=texts, **esc)

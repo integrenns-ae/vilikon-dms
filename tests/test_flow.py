@@ -4,15 +4,18 @@ from conftest import letter, recorded, with_annotation
 
 
 def _setup(cockpit):
-    counts = cockpit.sync_now()
-    assert "secret-sftp" not in str(counts)
-    return counts
+    """The core starts a pass after the IT Specialist set the DMS up; it runs in the background."""
+    answer = cockpit.sync_now()
+    assert answer["status"] == "started"
+    return answer
 
 
 def test_letters_are_read_filed_and_announced(cockpit, scanner, mistral, store):
-    counts = _setup(cockpit)
-    assert counts["new"] == 3 and counts["read"] == 3 and counts["errors"] == 0
-    assert counts["sources"][0]["error"] == ""
+    _setup(cockpit)
+    check = cockpit.get("ki/pruefen").json()
+    assert check["ok"] is True and check["sources"][0]["error"] == "" and check["sources"][0]["last_fetch"]
+    assert "secret-sftp" not in str(check)
+    assert len(store.documents()) == 3
     assert scanner.clients[-1].closed
 
     sent = mistral.requests[0]
@@ -39,14 +42,14 @@ def test_letters_are_read_filed_and_announced(cockpit, scanner, mistral, store):
     assert any("Gelesen: Finanzamt Musterstadt" in p["was"] for p in log)
 
 
-def test_second_pass_and_same_letter_twice_are_not_read_again(cockpit, scanner, mistral, store):
+def test_second_pass_and_same_letter_twice_are_not_read_again(cockpit, scanner, mistral, store, fetch):
     _setup(cockpit)
     calls = len(mistral.requests)
-    again = cockpit.sync_now()
+    again = fetch()
     assert again["new"] == 0 and again["duplicate"] == 0 and len(mistral.requests) == calls
     # the same scan under another name (scanned twice, or photographed as well)
     (scanner.folder / "scan_004.pdf").write_bytes((scanner.folder / "scan_001.pdf").read_bytes())
-    again = cockpit.sync_now()
+    again = fetch()
     assert again["duplicate"] == 1 and len(store.documents()) == 3 and len(mistral.requests) == calls
 
 
@@ -100,11 +103,11 @@ def test_cards(cockpit, scanner):
     assert pages["zahl"] == "4" and pages["zeilen"][0]["wert"] == "4 / 300"
 
 
-def test_reminder_joins_the_invoice_case(cockpit, scanner, mistral, store):
+def test_reminder_joins_the_invoice_case(cockpit, scanner, mistral, store, fetch):
     _setup(cockpit)
     reminder = with_annotation(recorded("invoice"), kind="reminder", subject="Mahnung zu Rechnung Nr. RE-2026-0815")
     (scanner.folder / "scan_005.pdf").write_bytes(mistral.answer(letter(50), reminder))
-    cockpit.sync_now()
+    fetch()
     docs = {d["kind"]: d for d in store.documents()}
     assert docs["reminder"]["case_id"] and docs["reminder"]["case_id"] == docs["invoice"]["case_id"]
     full = cockpit.get(f"ki/documents/{docs['reminder']['id']}").json()

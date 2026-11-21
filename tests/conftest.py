@@ -195,8 +195,13 @@ class FakeCockpit:
         return self.client.get("/" + path, params=params or None, headers=self.headers(who))
 
     def sync_now(self) -> dict:
-        r = self.client.post("/ki/sync", headers=self.headers())
-        assert r.status_code == 200, r.text
+        """`POST ki/sync` like the core (it answers at once), then wait for the pass in the background."""
+        from app import main
+
+        r = self.client.post("/ki/sync", json={}, headers=self.headers())
+        assert r.status_code == 202, r.text
+        assert main.pass_lock.acquire(timeout=30)
+        main.pass_lock.release()
         return r.json()
 
     def poll_events(self) -> list[dict]:
@@ -305,6 +310,14 @@ def store(env):
 
 
 @pytest.fixture
+def fetch(store):
+    """One pass right here, with what it found: what the background pass does after `POST ki/sync`."""
+    from app import pipeline
+
+    return lambda: pipeline.intake_pass(store) | {"sources": pipeline.source_list(store)}
+
+
+@pytest.fixture
 def scanner(tmp_path, monkeypatch, mistral, vault):
     """The scanner's SFTP folder `/post` with the three invented letters, each with its recorded Mistral answer, released
     to the DMS as the vault entry SCANNER. `host_key` is the key the fake server shows."""
@@ -320,7 +333,7 @@ def scanner(tmp_path, monkeypatch, mistral, vault):
     def connect(source):
         state.sources.append(source)
         if source["host_key"] and source["host_key"] != state.host_key:
-            raise sftp_ftp.IntakeError(sftp_ftp.t("intake.host_key_changed", host=source["host"]))
+            raise sftp_ftp.HostKeyChanged(sftp_ftp.t("intake.host_key_changed", host=source["host"]), state.host_key)
         assert source["password"] == "secret-sftp"
         state.clients.append(FakeSftp(root))
         return state.clients[-1], state.host_key

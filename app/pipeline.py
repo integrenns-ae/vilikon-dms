@@ -16,7 +16,7 @@ from pathlib import Path
 from pypdf import PdfReader
 
 from app import budget, ocr
-from app.intake import Adapter, IntakeError, open_adapter
+from app.intake import Adapter, HostKeyChanged, IntakeError, open_adapter
 from app.intake.env_sources import sources_from_env
 from app.store import Store
 from app.texts import t
@@ -198,14 +198,38 @@ def connect(store: Store, source: dict) -> Adapter:
     after that (the adapter refuses another one before the password goes out)."""
     state = store.source_states().get(source["id"]) or {}
     known = state.get("host_key", "") if state.get("host_key_for") == _where(source) else ""
-    adapter = open_adapter(source | {"host_key": known})
-    if adapter.host_key and adapter.host_key != known:
+    try:
+        adapter = open_adapter(source | {"host_key": known})
+    except HostKeyChanged as e:
+        store.source_state(source["id"], str(e), fetched=False)
+        store.set_new_host_key(source["id"], e.seen)
+        raise
+    if adapter.host_key and (adapter.host_key != known or state.get("host_key_new")):
         store.set_host_key(source["id"], _where(source), adapter.host_key)
     return adapter
 
 
+def check_source(store: Store, source: dict) -> str:
+    """A quick look into the folder: "" when the store answers, else what is wrong. Kept as the source's error, but
+    not as a fetch."""
+    error = ""
+    try:
+        adapter = connect(store, source)
+        try:
+            adapter.list()
+        finally:
+            adapter.close()
+    except IntakeError as e:
+        error = str(e)
+    except Exception as e:
+        error = t("intake.broken_off", error=type(e).__name__)
+    store.source_state(source["id"], error, fetched=False)
+    return error
+
+
 def source_list(store: Store, environ: Mapping[str, str] | None = None) -> list[dict]:
-    """Every source with what the last pass found: `{id, protocol, host, error, last_fetch}`, no secrets."""
+    """Every source with what the last pass or check found: `{id, protocol, host, error, last_fetch, host_key_new}`,
+    no secrets."""
     states = store.source_states()
     out = []
     for s in sources(environ):
@@ -217,6 +241,7 @@ def source_list(store: Store, environ: Mapping[str, str] | None = None) -> list[
                 "host": s["host"],
                 "error": state.get("error") or "",
                 "last_fetch": state.get("last_fetch"),
+                "host_key_new": state.get("host_key_new") or "",
             }
         )
     return out

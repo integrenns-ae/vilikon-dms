@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="{{SPRACHE}}">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{NAME}}</title>
+    <!-- The instance's palette from the cockpit (same origin, therefore absolute on purpose). Its plain :root
+         rules beat the app's built-in theme layer, so the owner's colours win; missing (local test run) → the
+         built-in Vilikon colours. -->
+    <link rel="stylesheet" href="/api/kit/farben.css" data-vilikon-farben vite-ignore />
+    <!-- Manrope from the cockpit (same origin); missing (local test run) → the system font. -->
+    <link rel="stylesheet" href="/schriften/schriften.css" vite-ignore />
+    <script>
+      // Light or dark like the cockpit (the owner's choice in this browser, else the system).
+      try {
+        var w = localStorage.getItem("vilikon:thema");
+        var d = w === "dunkel" || (w !== "hell" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = d ? "dark" : "light";
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./src/main.tsx"></script>
+  </body>
+</html>

@@ -308,8 +308,26 @@ def mistral(env, monkeypatch) -> FakeMistral:
     return fake
 
 
+UI_INDEX = (
+    '<!doctype html><html lang="{{SPRACHE}}"><title>{{NAME}}</title><script src="./assets/index-abc1.js"></script>'
+)
+
+
 @pytest.fixture
-def client(env, mistral):
+def ui(tmp_path, monkeypatch):
+    """A stand-in for oberflaeche/dist: npm builds the real one, the Python tests do without it."""
+    from app import main
+
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text(UI_INDEX, encoding="utf-8")
+    (dist / "assets" / "index-abc1.js").write_text("console.log('Post')", encoding="utf-8")
+    monkeypatch.setattr(main, "UI", dist)
+    return dist
+
+
+@pytest.fixture
+def client(env, mistral, ui):
     from app.main import app
 
     with TestClient(app) as c:

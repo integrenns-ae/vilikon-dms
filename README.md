@@ -30,9 +30,10 @@ The core reads three files from the released repository:
 | `MODULE.json` | `vilikon.modul/1` in German; `vilikon/en/MODULE.json` in English. Generated: `python -m app.module --write` (a test fails if they are stale) |
 | `BRIEFING.md` | What every employee with access learns about the DMS; `vilikon/en/BRIEFING.md` in English |
 
-The Verwalter builds with `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt` (Python 3.11 or newer,
-no `pip install .`) and starts `.venv/bin/python -m app` in the repository with a clean environment. The page is
-reached through Caddy at `/werkzeug/dms/` (prefix stripped) behind the cockpit's login; the browser never reaches `ki/`.
+The Verwalter builds with `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && cd oberflaeche &&
+npm ci && npm run build` (Python 3.11 or newer, no `pip install .`; Node 22 for the page) and starts
+`.venv/bin/python -m app` in the repository with a clean environment. The page is reached through Caddy at
+`/werkzeug/dms/` (prefix stripped) behind the cockpit's login; the browser never reaches `ki/`.
 
 The tools share one container with 1 GB of memory, so the DMS puts a letter together from photos one page at a time
 and keeps one letter at a time on its way to the OCR. Temporary files (spooled uploads) go below `DATA_DIR/tmp`.
@@ -187,10 +188,17 @@ yet". Version 0.1.0 kept pushed sources and the customer's key in the store; 0.2
 
 ### Page and phone
 
-`GET /` (menu entry „Post“ / "Mail", `/werkzeug/dms/` from outside): the inbox, the review list, the page count and an
-upload form for phone photos; for the owner also the file stores with their errors, a "Fetch now" button
+`GET /` (menu entry „Post“ / "Mail", `/werkzeug/dms/` from outside): the inbox, the review list, the page count and
+the upload for phone photos; for the owner also the file stores with their errors, a "Fetch now" button
 (`POST /api/sync`) and, after a changed SFTP host key, a button to accept it (`POST /api/sources/{id}/trust`).
-`GET /api/documents` feeds it.
+`GET /api/documents` feeds it; a row opens the original (`GET /api/documents/{id}/file`, confidential ones only for the
+owner).
+
+The page is the core's Vilikon app template (`oberflaeche/`, React + Vite + Tailwind, variant „statisch“): the cockpit's
+colours (`src/index.css`, the owner's signal colour live from `/api/kit/farben.css`), its type and its building blocks
+(`src/components/ui/`, never changed here: they are copies of the core's). The DMS's own parts are `src/seiten/`,
+`src/lib/` and `src/texte.ts` (every text in de and en). The server fills the language and the name into
+`oberflaeche/dist/index.html` per request and serves `dist/assets/` behind the same login.
 
 The page and `/api/*` need `X-Vilikon-Token` and `X-Vilikon-Benutzer` (email), both set by the core's Caddy.
 Confidential letters and the owner's buttons only with `X-Vilikon-Owner: 1` (not by `X-Vilikon-Rolle`: the owner who
@@ -213,6 +221,9 @@ ssh vilikon-vps 'for v in 3.11 3.12; do docker run --rm -v ~/dms-test:/src:ro -w
 - Dependencies live in `pyproject.toml` and `uv.lock`; `requirements.txt` (what the Verwalter installs) comes from
   `uv export --frozen --no-dev --no-emit-project -o requirements.txt`. The CI fails if it is stale.
 - After changing rights, functions, events, cards or their texts: `python -m app.module --write`.
+- The page: `cd oberflaeche && npm ci && npm run build` (on the server: `node:22-slim`). `npm run build` checks the
+  types, so a text missing in `en` fails it. Without a server, `dist/` opened under a path containing `/vorschau/`
+  shows the example data of `src/lib/beispiel.ts`.
 - A new version: `VERSION`, `ADAPTER.json` `version`, `python -m app.module --write`, `CHANGELOG.md` + `CHANGELOG.en.md`
   (a test keeps them in step).
 

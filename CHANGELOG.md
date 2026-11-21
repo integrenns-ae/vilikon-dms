@@ -2,6 +2,16 @@
 
 ## Unveröffentlicht
 
+## 0.3.0
+
+- Die Seite „Post“ sieht jetzt aus wie das Cockpit: dieselben Farben, dieselbe Schrift, dieselben Karten und
+  Knöpfe, auch auf dem Handy und im Dunkelmodus. Ändert der Inhaber die Farbe des Cockpits, zieht sie mit.
+- „Zu prüfen“ und „Eingang“ als Reiter mit Anzahl; Art, Status und „vertraulich“ stehen als kleine Marken an jedem
+  Brief.
+- Ein Klick auf einen Brief öffnet ihn, so lässt sich ein unklares Datum gleich im Brief nachsehen. Vertrauliche
+  Briefe öffnet nur der Inhaber.
+- Fotos oder ein PDF wählen lädt den Brief gleich hoch, ohne zweiten Knopf.
+
 ## 0.2.2
 
 - Wird ein Scanner-Ordner zum ersten Mal abgeholt, werden ältere Briefe, die schon dort lagen (mehr als 30 Tage vor dem

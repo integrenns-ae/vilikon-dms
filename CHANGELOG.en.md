@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.3.0
+
+- The “Mail” page now looks like the cockpit: the same colours, type, cards and buttons, on the phone and in dark
+  mode too. When the owner changes the cockpit's colour, it follows.
+- “To check” and “Inbox” as tabs with counts; kind, status and “confidential” are small labels on each letter.
+- A click on a letter opens it, so an unclear date can be checked in the letter right away. Only the owner opens
+  confidential letters.
+- Choosing photos or a PDF uploads the letter at once, without a second button.
+
 ## 0.2.2
 
 - When a scanner folder is fetched for the first time, older letters that already lay there (dated more than 30 days

@@ -78,7 +78,7 @@ def test_page_behind_the_cockpit_login(client, store):
         assert client.get("/", headers=forged).status_code == 401, forged
         assert client.get("/api/documents", headers=forged).json() == {"fehler": "Bitte im Cockpit anmelden."}
     page = client.get("/", headers=owner)
-    assert page.status_code == 200 and "<h1>Post</h1>" in page.text and 'fetch("api/upload"' in page.text
+    assert page.status_code == 200 and '<html lang="de"><title>Post</title>' in page.text
     for i, secret in enumerate((0, 1)):
         doc = store.add_document(sha=f"{i:064}", name=f"b{i}.pdf", source="test", suffix=".pdf", data=b"%PDF-", pages=1)
         store.update_document(
@@ -98,6 +98,38 @@ def test_page_behind_the_cockpit_login(client, store):
     ):
         seen = client.get("/api/documents", headers=colleague).json()
         assert [d["title"] for d in seen["documents"]] == ["Musterfirma GmbH"]
+
+
+def test_the_page_is_the_built_one_in_the_instances_language(client, ui, vault):
+    page = client.get("/", headers=browser())
+    assert page.headers["cache-control"] == "no-cache" and '<html lang="de"><title>Post</title>' in page.text
+    script = client.get("/assets/index-abc1.js", headers=browser())
+    assert script.status_code == 200 and "javascript" in script.headers["content-type"]
+    assert "immutable" in script.headers["cache-control"]
+    assert client.get("/assets/index-abc1.js").status_code == 401
+    (ui / "assets" / ".hidden").write_text("x")
+    for name in ("missing.js", ".hidden"):
+        assert client.get(f"/assets/{name}", headers=browser()).status_code == 404, name
+    vault(VILIKON_LANGUAGE="en")
+    assert '<html lang="en"><title>Mail</title>' in client.get("/", headers=browser()).text
+    (ui / "index.html").unlink()
+    page = client.get("/", headers=browser())
+    assert page.status_code == 503 and page.json()["fehler"].startswith("The page is not built.")
+
+
+def test_a_letter_opens_for_whom_the_list_shows_it(client, store):
+    owner = browser(owner=True, role="betreiber")
+    plain = store.add_document(sha="1" * 64, name="a.pdf", source="test", suffix=".pdf", data=b"%PDF-1.4 a", pages=1)
+    secret = store.add_document(sha="2" * 64, name="b.pdf", source="test", suffix=".pdf", data=b"%PDF-1.4 b", pages=1)
+    store.update_document(secret["id"], confidential=1)
+    r = client.get(f"/api/documents/{plain['id']}/file", headers=browser())
+    assert r.status_code == 200 and r.content == b"%PDF-1.4 a" and r.headers["content-type"] == "application/pdf"
+    assert r.headers["content-disposition"] == "inline" and r.headers["x-content-type-options"] == "nosniff"
+    assert client.get(f"/api/documents/{secret['id']}/file", headers=browser()).status_code == 404
+    assert client.get(f"/api/documents/{secret['id']}/file", headers=owner).content == b"%PDF-1.4 b"
+    assert client.get(f"/api/documents/{plain['id']}/file").status_code == 401
+    missing = client.get("/api/documents/unknown/file", headers=owner)
+    assert missing.json() == {"fehler": "Dieses Dokument gibt es nicht."}
 
 
 def test_the_language_comes_from_the_core(vault):

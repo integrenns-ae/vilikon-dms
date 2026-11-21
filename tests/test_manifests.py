@@ -123,7 +123,9 @@ def test_briefing(language):
 def test_adapter_manifest():
     a = ADAPTER
     assert a["standard"] == "vilikon.adapter/1" and a["slug"] == "dms"
-    assert a["build"] == "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+    assert a["build"] == (
+        "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && cd oberflaeche && npm ci && npm run build"
+    )
     assert a["start"] == ".venv/bin/python -m app"
     assert a["check"] == "ki/pruefen" and PATH.match(a["check"])
     for language in ("de", "en"):

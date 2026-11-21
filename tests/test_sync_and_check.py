@@ -116,7 +116,6 @@ def test_the_owner_fetches_now(client, scanner, store):
     assert len(store.documents()) == 3
     page = client.get("/api/documents", headers=OWNER).json()
     assert page["owner"] is True and page["sources"][0]["id"] == "scanner" and page["sources"][0]["last_fetch"]
-    assert "Jetzt abholen" in client.get("/", headers=OWNER).text
 
 
 def test_the_owner_accepts_a_new_host_key(client, scanner, store, fetch):

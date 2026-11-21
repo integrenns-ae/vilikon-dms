@@ -23,14 +23,15 @@ import tempfile
 import threading
 from contextlib import asynccontextmanager, contextmanager
 from datetime import date, timedelta
+from pathlib import Path
 from typing import BinaryIO
 
 from fastapi import Depends, FastAPI, File, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.exceptions import HTTPException
 
-from app import VERSION, budget, config, pipeline
+from app import VERSION, budget, config, ocr, pipeline
 from app import upload as upload_rules
 from app.store import Store, today
 from app.texts import t
@@ -526,21 +527,10 @@ def knowledge_file(id: str, _: str = Depends(cockpit)) -> PlainTextResponse:
 
 # --- page and phone --------------------------------------------------------------------------------------------------
 
-PAGE_KEYS = (
-    "module.name",
-    "page.upload",
-    "page.send",
-    "page.review",
-    "page.inbox",
-    "page.empty",
-    "page.confidential",
-    "page.pages",
-    "page.reading",
-    "page.sources",
-    "page.fetch",
-    "page.trust",
-    "page.never_fetched",
-)
+# The page is built from oberflaeche/ (the Vilikon app template: the cockpit's colours, type and building blocks) by
+# `npm ci && npm run build`, part of the build in ADAPTER.json. One build serves both languages.
+UI = Path(__file__).resolve().parent.parent / "oberflaeche" / "dist"
+_ASSET = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*$")
 
 
 def is_owner(request: Request) -> bool:
@@ -600,6 +590,19 @@ def page_documents(request: Request, who: str = Depends(person)) -> dict:
     }
 
 
+@app.get("/api/documents/{doc_id}/file")
+def page_file(doc_id: str, request: Request, who: str = Depends(person)) -> Response:
+    """The original of a letter, for a look at what the DMS could not read clearly. Confidential ones only for the
+    owner, like the list."""
+    store = get_store()
+    doc = store.document(doc_id)
+    if not doc or (doc["confidential"] and not is_owner(request)):
+        raise Refusal(404, t("error.no_document"))
+    media = "application/pdf" if doc["suffix"] == ".pdf" else ocr.IMAGES.get(doc["suffix"], "")
+    headers = {"Content-Disposition": "inline" if media else "attachment", "X-Content-Type-Options": "nosniff"}
+    return Response(store.original(doc), media_type=media or "application/octet-stream", headers=headers)
+
+
 @app.post("/api/sync")
 def page_sync(who: str = Depends(owner)) -> dict:
     """The owner's "Fetch now"."""
@@ -617,39 +620,22 @@ def trust_host_key(source_id: str, who: str = Depends(owner)) -> dict:
     return {"text": t("page.trusted")}
 
 
-PAGE = """<!doctype html><html lang="{lang}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{title}</title><style>body{{font-family:system-ui,sans-serif;margin:0 auto;max-width:720px;padding:16px;
-color:#1f2328;background:#fff}}@media(prefers-color-scheme:dark){{body{{color:#e6edf3;background:#0d1117}}}}
-li{{margin:6px 0}}small{{opacity:.7}}button{{font-size:1rem;padding:8px 14px}}</style>
-<h1>{title}</h1><form id="f"><label>{upload}<br><input type="file" name="files" accept="image/*,application/pdf"
-capture="environment" multiple required></label> <button>{send}</button><p id="m" role="status"></p></form>
-<h2>{review}</h2><ul id="p"></ul><h2>{inbox}</h2><ul id="d"></ul><p><small id="s"></small></p>
-<section id="o" hidden><h2>{sources}</h2><ul id="q"></ul><button id="g" type="button">{fetch}</button>
-<p id="r" role="status"></p></section>
-<script>const T={texts};
-function li(r){{const e=document.createElement("li");e.textContent=r.date+" · "+(r.kind_text?r.kind_text+" · ":"")+r.title+
-(r.confidential?" ("+T["page.confidential"]+")":"")+(r.reason?" – "+r.reason:"");return e}}
-function fill(id,rows){{const u=document.getElementById(id);u.replaceChildren(...rows.map(li));
-if(!rows.length){{const e=document.createElement("li");e.textContent=T["page.empty"];u.append(e)}}}}
-function say(d){{document.getElementById("r").textContent=d.text||d.fehler}}
-function post(path){{fetch(path,{{method:"POST"}}).then(r=>r.json()).then(d=>{{say(d);setTimeout(load,3000)}})}}
-function source(x){{const e=document.createElement("li");e.textContent=x.id+" ("+x.protocol+" "+x.host+"): "+
-(x.error||(x.last_fetch?x.last_fetch.slice(0,16).replace("T"," "):T["page.never_fetched"]));if(x.host_key_new){{
-const b=document.createElement("button");b.type="button";b.textContent=T["page.trust"];b.title=x.host_key_new;
-b.onclick=()=>post("api/sources/"+encodeURIComponent(x.id)+"/trust");e.append(" ",b)}}return e}}
-function load(){{fetch("api/documents").then(r=>r.json()).then(d=>{{fill("p",d.review);fill("d",d.documents);
-document.getElementById("s").textContent=T["page.pages"]+": "+d.pages.pages+" / "+(d.pages.cap||"∞");
-document.getElementById("o").hidden=!d.owner;document.getElementById("q").replaceChildren(...d.sources.map(source))}})}}
-document.getElementById("g").onclick=()=>post("api/sync");
-document.getElementById("f").onsubmit=e=>{{e.preventDefault();const m=document.getElementById("m");m.textContent=T["page.reading"];
-fetch("api/upload",{{method:"POST",body:new FormData(e.target)}}).then(r=>r.json()).then(d=>{{m.textContent=d.text||d.fehler;
-e.target.reset();load()}})}};load()</script></html>"""
-
-
 @app.get("/", response_class=HTMLResponse)
-def page(_: str = Depends(person)) -> str:
-    """Inbox, the review list and the phone upload; for the owner also the file stores and "Fetch now". Relative links:
-    the page lives under the core's prefix."""
-    texts = json.dumps({k: t(k) for k in PAGE_KEYS}, ensure_ascii=False).replace("<", "\\u003c")
-    esc = {k: html.escape(t(f"page.{k}")) for k in ("upload", "send", "review", "inbox", "sources", "fetch")}
-    return PAGE.format(lang=config.settings.language, title=html.escape(t("module.name")), texts=texts, **esc)
+def page(_: str = Depends(person)) -> HTMLResponse:
+    """The page from oberflaeche/: inbox, the review list and the phone upload; for the owner also the file stores.
+    The language and the name are filled in per instance. Relative links: the page lives under the core's prefix."""
+    try:
+        text = (UI / "index.html").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise Refusal(503, t("error.ui_missing")) from None
+    text = text.replace("{{SPRACHE}}", config.settings.language).replace("{{NAME}}", html.escape(t("module.name")))
+    return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/assets/{name}")
+def asset(name: str, _: str = Depends(person)) -> FileResponse:
+    """The page's scripts and styles; their names change with every build."""
+    path = UI / "assets" / name
+    if not _ASSET.match(name) or not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(path, headers={"Cache-Control": "private, max-age=31536000, immutable"})

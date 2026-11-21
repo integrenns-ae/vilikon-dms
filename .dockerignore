@@ -4,3 +4,5 @@ tests
 data*
 .env*
 **/__pycache__
+oberflaeche/node_modules
+oberflaeche/dist

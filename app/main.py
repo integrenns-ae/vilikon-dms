@@ -21,7 +21,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.exceptions import HTTPException
 
-from app import VERSION, budget, config, intake, pipeline
+from app import VERSION, budget, config, pipeline
 from app.module import describe
 from app.store import Store
 from app.texts import t
@@ -33,7 +33,6 @@ MAX_EVENTS = 5  # the cockpit takes at most this many per fetch
 FILED = ("done", "review")
 _store: Store | None = None
 _store_lock = threading.Lock()
-_SOURCE_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
 
 
 def get_store() -> Store:
@@ -312,52 +311,15 @@ def pages(_: str = Depends(cockpit)) -> dict:
     return budget.state(get_store())
 
 
-# --- sources ---------------------------------------------------------------------------------------------------------
-
-SECRET_KEYS = ("password", "key", "token", "json")
-
-
-def _public(source: dict) -> dict:
-    out = {k: v for k, v in source.items() if not k.startswith("_") and not any(s in k for s in SECRET_KEYS)}
-    return out | {"error": source.get("_error") or "", "last_fetch": source.get("_last_fetch")}
-
-
-@app.put("/ki/sources")
-async def set_sources(request: Request, who: str = Depends(cockpit)) -> dict:
-    """The cockpit pushes all sources at once (settings plus credentials from the vault); missing ones are removed.
-    `mistral_key`: the customer's own key (lifts the page cap); "" removes it, absent leaves it."""
-    try:
-        body = await request.json()
-    except ValueError as e:
-        raise Refusal(400, t("error.json")) from e
-    sources = body.get("sources") if isinstance(body, dict) else None
-    if not isinstance(sources, list):
-        raise Refusal(400, t("error.sources_list"))
-    for s in sources:
-        if not isinstance(s, dict) or not _SOURCE_ID.match(str(s.get("id") or "")):
-            raise Refusal(400, t("error.source_id"))
-        if s.get("kind") not in intake.KINDS:
-            raise Refusal(400, t("intake.unknown_kind", kind=s.get("kind") or "?"))
-    store = get_store()
-    store.set_sources(sources)
-    if isinstance(body.get(budget.OWN_KEY), str):
-        store.set_value(budget.OWN_KEY, body[budget.OWN_KEY].strip())
-    store.log(who, t("log.sources", n=len(sources)))
-    return {"sources": [_public(s) for s in store.sources()], "pages": budget.state(store)}
-
-
-@app.get("/ki/sources")
-def sources(_: str = Depends(cockpit)) -> dict:
-    store = get_store()
-    return {"sources": [_public(s) for s in store.sources()], "pages": budget.state(store)}
+# --- file stores ----------------------------------------------------------------------------------------------------
 
 
 @app.post("/ki/sync")
 def sync_now(_: str = Depends(cockpit)) -> dict:
-    """Fetch from the sources now (after `PUT ki/sources`, to check them)."""
+    """Fetch from the file stores now. They come from the environment (the vault entries released for the DMS)."""
     store = get_store()
     counts = pipeline.intake_pass(store)
-    return counts | {"sources": [_public(s) for s in store.sources()]}
+    return counts | {"sources": pipeline.source_list(store)}
 
 
 # --- vilikon.wissen/1 ------------------------------------------------------------------------------------------------

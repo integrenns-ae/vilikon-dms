@@ -3,10 +3,13 @@
 import io
 from datetime import UTC, datetime
 
-from conftest import SFTP_SOURCE, letter, photo, recorded
+import pytest
+from conftest import HOST_KEY, filestore, letter, photo, recorded
 from pypdf import PdfReader
 
 from app import budget, config, pipeline
+from app.intake import IntakeError, sftp_ftp
+from app.intake.env_sources import sources_from_env
 
 LOGGED_IN = {"X-Vilikon-Benutzer": "erika@example.com"}
 
@@ -15,7 +18,6 @@ LOGGED_IN = {"X-Vilikon-Benutzer": "erika@example.com"}
 
 def test_at_the_cap_documents_wait_and_go_on_next_month(cockpit, scanner, store, monkeypatch):
     monkeypatch.setattr(config.settings, "pages_per_month", 2)
-    cockpit.push_sources([SFTP_SOURCE])
     counts = cockpit.sync_now()
     # scan_001 (1 page) is read, scan_002 (2 pages) would pass the cap: it and everything after it wait, in order
     assert counts["read"] == 1
@@ -35,21 +37,36 @@ def test_at_the_cap_documents_wait_and_go_on_next_month(cockpit, scanner, store,
     assert [d["status"] for d in store.documents()] == ["done", "done", "waiting"]
 
 
-def test_an_own_key_lifts_the_cap(cockpit, scanner, store, mistral, monkeypatch):
-    monkeypatch.setattr(config.settings, "pages_per_month", 1)
-    cockpit.push_sources([SFTP_SOURCE], mistral_key="customer-key")
+def test_a_customers_own_key_has_no_cap(cockpit, scanner, mistral, vault):
+    # the customer's own vault entry: the same type, without OCR_BETREIBER and without a cap
+    vault(OCR_PASSWORT="customer-key", OCR_BETREIBER=None, OCR_PAGES_PER_MONTH="1")
     assert cockpit.sync_now()["read"] == 3
     assert mistral.requests[-1]["_auth"] == "Bearer customer-key"
-    state = cockpit.get("ki/sources").json()
-    assert state["pages"]["cap"] is None and state["pages"]["own_key"] is True
-    assert "customer-key" not in str(state)
-    cockpit.push_sources([SFTP_SOURCE], mistral_key="")
-    assert budget.cap(store) == 1
+    pages = cockpit.get("ki/pages").json()
+    assert pages["cap"] is None and pages["own_key"] is True
+    assert budget.cap() == 0
 
 
-def test_without_any_key_documents_wait(cockpit, scanner, store, monkeypatch):
-    monkeypatch.setattr(config.settings, "mistral_api_key", "")
-    cockpit.push_sources([SFTP_SOURCE])
+def test_where_the_key_and_the_cap_come_from(env, vault):
+    assert (budget.api_key(), budget.operator(), budget.cap()) == ("operator-key", True, 300)
+    vault(OCR_PAGES_PER_MONTH=None, DMS_PAGES_PER_MONTH="7")
+    assert budget.cap() == 7
+    vault(DMS_PAGES_PER_MONTH=None)
+    assert budget.cap() == 500
+    vault(OCR_PAGES_PER_MONTH="0")
+    assert budget.cap() == 0  # the operator's key without a cap
+    # standalone: MISTRAL_API_KEY stands in, without a cap unless OCR_BETREIBER says it is the operator's
+    vault(dict.fromkeys(("OCR_ART", "OCR_SERVICE", "OCR_PASSWORT", "OCR_BETREIBER", "OCR_PAGES_PER_MONTH")))
+    vault(MISTRAL_API_KEY="standalone-key")
+    assert (budget.api_key(), budget.cap()) == ("standalone-key", 0)
+    vault(OCR_PASSWORT="vault-key")
+    assert budget.api_key() == "vault-key"
+    vault(OCR_SERVICE="openai")
+    assert budget.api_key() == ""  # only Mistral reads letters
+
+
+def test_without_any_key_documents_wait(cockpit, scanner, store, vault):
+    vault(OCR_PASSWORT=None)
     cockpit.sync_now()
     assert {(d["status"], d["reason"]) for d in store.documents()} == {("waiting", "no_key")}
 
@@ -115,8 +132,34 @@ def test_a_shared_pdf_passes_as_it_is(client, mistral, store):
 # --- intake adapters -------------------------------------------------------------------------------------------------
 
 
-def test_sftp_moves_done_files_when_the_source_says_so(cockpit, scanner):
-    cockpit.push_sources([SFTP_SOURCE | {"move_done": True}])
+def test_sources_from_the_environment():
+    environ = (
+        filestore()
+        | filestore("SCANNER2", PROTOCOL="ftps", PORT="", MOVE_DONE="ja")
+        | filestore("ARCHIVE", PROTOCOL="FTP", MOVE_DONE="false", PORT="2121")
+        | {"OCR_ART": "api_key", "OCR_PASSWORT": "operator-key", "_ART": "filestore", "OTHER_ART": "login"}
+    )
+    found = {s["id"]: s for s in sources_from_env(environ)}
+    assert list(found) == ["archive", "scanner", "scanner2"]
+    assert found["scanner"] == {
+        "id": "scanner",
+        "kind": "sftp",
+        "protocol": "sftp",
+        "tls": True,
+        "host": "nas.example.com",
+        "port": 22,
+        "user": "scan",
+        "password": "secret-sftp",
+        "folder": "/post",
+        "move_done": False,
+    }
+    assert (found["scanner2"]["kind"], found["scanner2"]["tls"], found["scanner2"]["port"]) == ("ftp", True, None)
+    assert found["scanner2"]["move_done"] is True
+    assert (found["archive"]["kind"], found["archive"]["tls"], found["archive"]["port"]) == ("ftp", False, 2121)
+
+
+def test_sftp_moves_done_files_when_the_source_says_so(cockpit, scanner, vault):
+    vault(SCANNER_MOVE_DONE="true")
     cockpit.sync_now()
     assert sorted(p.name for p in (scanner.folder / "done").iterdir()) == [
         "scan_001.pdf",
@@ -127,37 +170,115 @@ def test_sftp_moves_done_files_when_the_source_says_so(cockpit, scanner):
 
 
 def test_sftp_leaves_the_store_alone_by_default(cockpit, scanner):
-    cockpit.push_sources([SFTP_SOURCE])
     cockpit.sync_now()
     assert not (scanner.folder / "done").exists()
 
 
-def test_ftp(cockpit, scanner):
-    cockpit.push_sources([{"id": "ftp", "kind": "ftp", "host": "ftp.example.com", "folder": "post", "move_done": True}])
+def test_ftp(cockpit, scanner, vault):
+    vault(dict.fromkeys(filestore()))
+    vault(filestore("SCANNER2", PROTOCOL="ftp", HOST="ftp.example.com", FOLDER="post", MOVE_DONE="1"))
     counts = cockpit.sync_now()
     assert counts["new"] == 3 and counts["errors"] == 0
+    assert [s["id"] for s in counts["sources"]] == ["scanner2"]
+    assert scanner.sources[-1]["tls"] is False
     assert len(list((scanner.folder / "done").iterdir())) == 3
 
 
-def test_missing_folder_and_stores_not_yet_supported(cockpit, scanner):
-    cockpit.push_sources(
-        [
-            SFTP_SOURCE | {"folder": "/missing"},
-            {"id": "drive", "kind": "gdrive"},
-            {"id": "nas", "kind": "smb", "host": "nas.example.com"},
-            {"id": "off", "kind": "onedrive", "active": False},
-        ]
-    )
+def test_missing_folder_and_stores_not_yet_supported(cockpit, scanner, vault):
+    vault(SCANNER_FOLDER="/missing")
+    vault(filestore("SCANNER2", PROTOCOL="gdrive"), **filestore("SCANNER3", PROTOCOL="smb"))
+    vault(filestore("SCANNER4", PROTOCOL=""))
     counts = cockpit.sync_now()
-    assert counts["errors"] == 3
+    assert counts["errors"] == 4
     state = {s["id"]: s["error"] for s in counts["sources"]}
     assert state["scanner"] == "Den Ordner „/missing“ gibt es in der Ablage nicht."
-    assert state["drive"] == "Die Ablage „gdrive“ wird noch nicht unterstützt."
-    assert state["nas"] == "Die Ablage „smb“ wird noch nicht unterstützt."
-    assert state["off"] == ""
+    assert state["scanner2"] == "Die Ablage „gdrive“ wird noch nicht unterstützt."
+    assert state["scanner3"] == "Die Ablage „smb“ wird noch nicht unterstützt."
+    assert state["scanner4"] == "Diese Art von Ablage kenne ich nicht: ?."
 
 
-def test_a_failed_login_names_no_password(cockpit, scanner):
-    cockpit.push_sources([SFTP_SOURCE | {"password": "wrong"}])
+def test_a_failed_login_names_no_password(cockpit, scanner, vault):
+    vault(SCANNER_PASSWORT="wrong")
     error = cockpit.sync_now()["sources"][0]["error"]
     assert error.startswith("Keine Verbindung zur SFTP-Ablage (AssertionError)") and "wrong" not in error
+
+
+def test_the_sftp_host_key_is_trusted_on_first_use(cockpit, scanner, store, vault):
+    assert cockpit.sync_now()["new"] == 3
+    assert scanner.sources[-1]["host_key"] == ""  # the first time nothing is known
+    assert store.source_states()["scanner"]["host_key"] == HOST_KEY
+    (scanner.folder / "scan_004.pdf").write_bytes(letter(40))
+    scanner.host_key = "ssh-ed25519 SHA256:someone-else"
+    counts = cockpit.sync_now()
+    assert counts["new"] == 0 and counts["errors"] == 1
+    assert counts["sources"][0]["error"].startswith("Der SFTP-Server nas.example.com zeigt einen anderen Schlüssel")
+    assert store.source_states()["scanner"]["host_key"] == HOST_KEY
+    # another host (the owner changed the vault entry) is trusted anew
+    vault(SCANNER_HOST="nas2.example.com")
+    assert cockpit.sync_now()["new"] == 1
+    assert store.source_states()["scanner"]["host_key"] == "ssh-ed25519 SHA256:someone-else"
+
+
+class _Key:
+    def __init__(self, blob: bytes) -> None:
+        self.blob = blob
+
+    def asbytes(self) -> bytes:
+        return self.blob
+
+    def get_name(self) -> str:
+        return "ssh-ed25519"
+
+
+def test_a_changed_host_key_ends_the_connection_before_the_password(monkeypatch):
+    import paramiko
+
+    sent = []
+
+    class Transport:
+        def __init__(self, sock) -> None:
+            self.closed = False
+
+        def start_client(self, timeout=None) -> None:
+            pass
+
+        def get_remote_server_key(self):
+            return _Key(b"the-server-key")
+
+        def auth_password(self, user, password) -> None:
+            sent.append(password)
+
+        def close(self) -> None:
+            self.closed = True
+
+    monkeypatch.setattr(sftp_ftp.socket, "create_connection", lambda *a, **kw: object())
+    monkeypatch.setattr(paramiko, "Transport", Transport)
+    monkeypatch.setattr(paramiko.SFTPClient, "from_transport", classmethod(lambda cls, t: "client"))
+    source = {"host": "nas.example.com", "port": 22, "user": "scan", "password": "secret-sftp", "host_key": ""}
+    client, seen = sftp_ftp._sftp_connect(source)
+    assert client == "client" and seen == sftp_ftp.fingerprint(_Key(b"the-server-key")) and sent == ["secret-sftp"]
+    assert seen.startswith("ssh-ed25519 SHA256:") and not seen.endswith("=")
+    with pytest.raises(IntakeError):
+        sftp_ftp._sftp_connect(source | {"host_key": "ssh-ed25519 SHA256:another"})
+    assert sent == ["secret-sftp"]
+
+
+def test_the_store_forgets_what_the_cockpit_pushed_before(tmp_path):
+    import sqlite3
+
+    from app.store import Store
+
+    db = sqlite3.connect(tmp_path / "dms.sqlite3")
+    db.executescript(
+        "CREATE TABLE sources (id TEXT PRIMARY KEY, data TEXT NOT NULL, error TEXT, last_fetch TEXT);"
+        "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
+    )
+    db.execute("INSERT INTO sources VALUES ('scanner', '{\"password\": \"secret-sftp-old\"}', '', NULL)")
+    db.execute("INSERT INTO settings VALUES ('mistral_key', 'customer-key-old')")
+    db.commit()
+    db.close()
+    store = Store(tmp_path)
+    tables = {r["name"] for r in store._all("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert "sources" not in tables and "settings" not in tables and "source_state" in tables
+    files = b"".join(p.read_bytes() for p in tmp_path.glob("dms.sqlite3*"))
+    assert b"secret-sftp-old" not in files and b"customer-key-old" not in files

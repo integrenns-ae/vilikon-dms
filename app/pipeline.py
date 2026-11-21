@@ -8,13 +8,16 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 from pypdf import PdfReader
 
 from app import budget, ocr
-from app.intake import IntakeError, open_adapter
+from app.intake import Adapter, IntakeError, open_adapter
+from app.intake.env_sources import sources_from_env
 from app.store import Store
 from app.texts import t
 
@@ -60,9 +63,9 @@ def process(store: Store, doc: dict) -> dict:
     """Read one document if the budget allows. Returns it as it is now."""
     if not ocr.readable(doc["name"]):
         return _set(store, doc, status="error", reason="format")
-    if budget.too_big(store, doc["pages"]):
+    if budget.too_big(doc["pages"]):
         return _set(store, doc, status="error", reason="too_big")
-    key = budget.api_key(store)
+    key = budget.api_key()
     if not key or not budget.fits(store, doc["pages"]):
         return _set(store, doc, status="waiting", reason="no_key" if not key else "page_cap")
     try:
@@ -181,14 +184,50 @@ def process_open(store: Store) -> int:
     return n
 
 
-def intake_pass(store: Store) -> dict:
+def sources(environ: Mapping[str, str] | None = None) -> list[dict]:
+    """The file stores the owner released for the DMS, as they are now."""
+    return sources_from_env(os.environ if environ is None else environ)
+
+
+def _where(source: dict) -> str:
+    return f"{source.get('host')}:{source.get('port') or ''}"
+
+
+def connect(store: Store, source: dict) -> Adapter:
+    """Open a source's store. An SFTP server's key is trusted the first time per host and port, and must stay the same
+    after that (the adapter refuses another one before the password goes out)."""
+    state = store.source_states().get(source["id"]) or {}
+    known = state.get("host_key", "") if state.get("host_key_for") == _where(source) else ""
+    adapter = open_adapter(source | {"host_key": known})
+    if adapter.host_key and adapter.host_key != known:
+        store.set_host_key(source["id"], _where(source), adapter.host_key)
+    return adapter
+
+
+def source_list(store: Store, environ: Mapping[str, str] | None = None) -> list[dict]:
+    """Every source with what the last pass found: `{id, protocol, host, error, last_fetch}`, no secrets."""
+    states = store.source_states()
+    out = []
+    for s in sources(environ):
+        state = states.get(s["id"]) or {}
+        out.append(
+            {
+                "id": s["id"],
+                "protocol": s["protocol"],
+                "host": s["host"],
+                "error": state.get("error") or "",
+                "last_fetch": state.get("last_fetch"),
+            }
+        )
+    return out
+
+
+def intake_pass(store: Store, environ: Mapping[str, str] | None = None) -> dict:
     """Fetch what is new in every source, then read what the budget allows."""
     counts = {"new": 0, "duplicate": 0, "errors": 0}
-    for source in store.sources():
-        if source.get("active") is False:
-            continue
+    for source in sources(environ):
         try:
-            adapter = open_adapter(source)
+            adapter = connect(store, source)
         except IntakeError as e:
             store.source_state(source["id"], str(e))
             counts["errors"] += 1

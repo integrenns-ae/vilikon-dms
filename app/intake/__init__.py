@@ -3,11 +3,12 @@
 - `list()`: what lies in the store's folder now, as `Item`s (id stable per file, version changes with the content);
 - `fetch(item)`: its bytes;
 - `mark_done(item)`: the document is in the DMS. Stores stay untouched unless the source says `move_done: true`,
-  then the file moves to the subfolder `done/`.
+  then the file moves to the subfolder `done/`;
+- `host_key`: the key the server showed (SFTP; "" for the others), trusted on first use by the pipeline.
 
-A source is what the cockpit pushed in `PUT ki/sources` (settings plus credentials from the vault):
-`{"id", "kind": "sftp|ftp|smb|gdrive|onedrive", "host", "port", "user", "password", "folder", "move_done", "tls",
-"active"}`."""
+A source is a vault entry of type filestore from the environment (app/intake/env_sources.py):
+`{"id", "kind": "sftp|ftp|smb|gdrive|onedrive", "protocol", "host", "port", "user", "password", "folder", "move_done",
+"tls"}`, plus `host_key`, the key the pipeline trusts for this host (empty the first time)."""
 
 from __future__ import annotations
 
@@ -30,6 +31,8 @@ class IntakeError(Exception):
 
 
 class Adapter(Protocol):
+    host_key: str
+
     def list(self) -> list[Item]: ...
     def fetch(self, item: Item) -> bytes: ...
     def mark_done(self, item: Item) -> None: ...

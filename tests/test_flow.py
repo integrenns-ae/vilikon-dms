@@ -1,13 +1,12 @@
 """Three invented letters from the scanner's SFTP folder, through the DMS, as the cockpit sees them."""
 
-from conftest import SFTP_SOURCE, letter, recorded, with_annotation
+from conftest import letter, recorded, with_annotation
 
 
 def _setup(cockpit):
-    r = cockpit.push_sources([SFTP_SOURCE])
-    assert r.status_code == 200, r.text
-    assert "password" not in r.json()["sources"][0]
-    return cockpit.sync_now()
+    counts = cockpit.sync_now()
+    assert "secret-sftp" not in str(counts)
+    return counts
 
 
 def test_letters_are_read_filed_and_announced(cockpit, scanner, mistral, store):

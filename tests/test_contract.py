@@ -61,11 +61,10 @@ def test_module_in_english(cockpit, monkeypatch):
 
 def test_errors_are_plain_words(cockpit):
     assert cockpit.get("ki/missing").json() == {"fehler": "Diesen Pfad gibt es nicht."}
-    assert cockpit.client.put("/ki/sources", content=b"{", headers=cockpit.headers()).status_code == 400
-    r = cockpit.push_sources([{"id": "Bad Id", "kind": "sftp"}])
-    assert r.status_code == 400 and "id" in r.json()["fehler"]
-    r = cockpit.push_sources([{"id": "a1", "kind": "fax"}])
-    assert r.json() == {"fehler": "Diese Art von Ablage kenne ich nicht: fax."}
+    # file stores come from the vault through the environment; nothing pushes them any more
+    r = cockpit.client.put("/ki/sources", json={"sources": []}, headers=cockpit.headers())
+    assert r.status_code in (404, 405) and r.json() == {"fehler": "Diesen Pfad gibt es nicht."}
+    assert cockpit.get("ki/sources").status_code == 404
 
 
 def test_events_are_not_lost_when_more_than_five_wait(cockpit, store):
@@ -101,3 +100,12 @@ def test_page_behind_the_cockpit_login(client, store):
     assert len(owner["review"]) == 2 and owner["review"][0]["reason"].startswith("Eine Frist")
     operator = client.get("/api/documents", headers=browser | {"X-Vilikon-Rolle": "betreiber"}).json()
     assert [d["title"] for d in operator["documents"]] == ["Musterfirma GmbH"]
+
+
+def test_the_language_comes_from_the_core(vault):
+    vault(DMS_LANGUAGE="en")
+    assert config.settings.language == "en"  # standalone
+    vault(VILIKON_LANGUAGE="de")
+    assert config.settings.language == "de"  # the instance's language wins
+    vault(VILIKON_LANGUAGE="fr", DMS_LANGUAGE=None)
+    assert config.settings.language == "de"

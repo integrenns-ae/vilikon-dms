@@ -115,6 +115,7 @@ TEXTS = {
     "intake.no_connection": "Keine Verbindung zur {kind}-Ablage ({error}). Stimmen Adresse, Benutzer und Passwort?",
     "intake.folder_missing": "Den Ordner „{folder}“ gibt es in der Ablage nicht.",
     "intake.broken_off": "Die Verbindung zur Ablage ist abgebrochen ({error}). Nächster Versuch beim nächsten Abgleich.",
+    "intake.host_key_changed": "Der SFTP-Server {host} zeigt einen anderen Schlüssel als beim ersten Mal. Aus Vorsicht wird nichts abgeholt und kein Passwort gesendet.",
     # upload
     "upload.empty": "Es kam keine Datei an.",
     "upload.too_many": "Höchstens {n} Seiten auf einmal.",
@@ -130,15 +131,11 @@ TEXTS = {
     # log
     "log.received": "„{name}“ eingegangen ({source})",
     "log.read": "Gelesen: {title} ({kind})",
-    "log.sources": "Ablagen eingestellt ({n})",
     # errors
     "error.token": "Nur das Cockpit darf das Modul aufrufen.",
     "error.login": "Bitte im Cockpit anmelden.",
     "error.no_document": "Dieses Dokument gibt es nicht.",
     "error.no_receipt": "Diesen Beleg gibt es nicht.",
-    "error.json": "Die Anfrage ist kein gültiges JSON.",
-    "error.sources_list": "Erwartet wird ein Feld „sources“ mit einer Liste.",
-    "error.source_id": "Jede Ablage braucht eine id aus Kleinbuchstaben, Ziffern, - und _.",
     "error.path": "Diesen Pfad gibt es nicht.",
     "error.input": "Die Angaben passen nicht: {error}",
     # page

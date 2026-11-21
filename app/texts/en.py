@@ -114,6 +114,7 @@ TEXTS = {
     "intake.no_connection": "No connection to the {kind} store ({error}). Are address, user and password right?",
     "intake.folder_missing": "The folder “{folder}” does not exist in the file store.",
     "intake.broken_off": "The connection to the file store broke off ({error}). Next try at the next sync.",
+    "intake.host_key_changed": "The SFTP server {host} shows a different key than the first time. To be safe, nothing is fetched and no password is sent.",
     # upload
     "upload.empty": "No file arrived.",
     "upload.too_many": "At most {n} pages at once.",
@@ -129,15 +130,11 @@ TEXTS = {
     # log
     "log.received": "“{name}” arrived ({source})",
     "log.read": "Read: {title} ({kind})",
-    "log.sources": "File stores set ({n})",
     # errors
     "error.token": "Only the cockpit may call this module.",
     "error.login": "Please sign in to the cockpit.",
     "error.no_document": "This document does not exist.",
     "error.no_receipt": "This receipt does not exist.",
-    "error.json": "The request is not valid JSON.",
-    "error.sources_list": "Expected a field “sources” with a list.",
-    "error.source_id": "Every file store needs an id of lowercase letters, digits, - and _.",
     "error.path": "This path does not exist.",
     "error.input": "The input does not fit: {error}",
     # page

@@ -1,4 +1,5 @@
-"""Fakes for everything outside the DMS: Mistral (recorded answers), the scanner's SFTP/FTP store and the cockpit."""
+"""Fakes for everything outside the DMS: Mistral (recorded answers), the scanner's SFTP/FTP store, the cockpit, and the
+vault entries the Verwalter puts into the environment."""
 
 from __future__ import annotations
 
@@ -23,16 +24,24 @@ from app.intake import sftp_ftp
 
 TOKEN = "test-token-123"
 FIXTURES = Path(__file__).parent / "fixtures" / "mistral"
-SFTP_SOURCE = {
-    "id": "scanner",
-    "kind": "sftp",
-    "host": "nas.example.com",
-    "port": 22,
-    "user": "scan",
-    "password": "secret-sftp",
-    "folder": "/post",
+HOST_KEY = "ssh-ed25519 SHA256:bXVzdGVyZmlybWEtbmFzLWtleQ"
+SCANNER = {
+    "PROTOCOL": "sftp",
+    "HOST": "nas.example.com",
+    "PORT": "22",
+    "USER": "scan",
+    "FOLDER": "/post",
+    "PASSWORT": "secret-sftp",
 }
-ENV = ("DATA_DIR", "DMS_TOKEN", "MISTRAL_API_KEY", "DMS_INTERVAL_MIN", "DMS_PAGES_PER_MONTH", "DMS_LANGUAGE")
+# The vault entry OCR with the operator's key, as the Verwalter sets it.
+OCR = {"OCR_ART": "api_key", "OCR_SERVICE": "mistral", "OCR_PASSWORT": "operator-key", "OCR_BETREIBER": "ja"}
+OWN_PREFIXES = ("DMS_", "OCR_", "SCANNER", "VILIKON_", "MISTRAL_")
+
+
+def filestore(name: str = "SCANNER", **fields) -> dict[str, str]:
+    """The variables of a released vault entry of type filestore: `filestore(FOLDER="/missing")`."""
+    values = SCANNER | {k.upper(): str(v) for k, v in fields.items()}
+    return {f"{name}_ART": "filestore"} | {f"{name}_{k}": v for k, v in values.items()}
 
 
 def recorded(name: str) -> dict:
@@ -185,9 +194,6 @@ class FakeCockpit:
     def get(self, path: str, who: str = "cockpit", **params):
         return self.client.get("/" + path, params=params or None, headers=self.headers(who))
 
-    def push_sources(self, sources: list[dict], **extra):
-        return self.client.put("/ki/sources", json={"sources": sources, **extra}, headers=self.headers())
-
     def sync_now(self) -> dict:
         r = self.client.post("/ki/sync", headers=self.headers())
         assert r.status_code == 200, r.text
@@ -244,18 +250,31 @@ class FakeCockpit:
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
-    for k in ENV:
-        monkeypatch.delenv(k, raising=False)
+    for k in list(os.environ):
+        if k.startswith(OWN_PREFIXES) or k == "DATA_DIR":
+            monkeypatch.delenv(k)
+    for k, v in (OCR | {"OCR_PAGES_PER_MONTH": "300", "DMS_INTERVAL_MIN": "0", "DMS_TOKEN": TOKEN}).items():
+        monkeypatch.setenv(k, v)
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("DMS_TOKEN", TOKEN)
-    monkeypatch.setenv("MISTRAL_API_KEY", "operator-key")
-    monkeypatch.setenv("DMS_INTERVAL_MIN", "0")
-    monkeypatch.setenv("DMS_PAGES_PER_MONTH", "300")
     config.reload()
     yield
-    for k in ENV:
-        os.environ.pop(k, None)
+    monkeypatch.undo()
     config.reload()
+
+
+@pytest.fixture
+def vault(env, monkeypatch):
+    """Release vault entries (or drop them: `vault(SCANNER_ART=None)`), as the Verwalter does on a restart."""
+
+    def release(variables: dict | None = None, **more) -> None:
+        for k, v in {**(variables or {}), **more}.items():
+            if v is None:
+                monkeypatch.delenv(k, raising=False)
+            else:
+                monkeypatch.setenv(k, str(v))
+        config.reload()
+
+    return release
 
 
 @pytest.fixture
@@ -286,8 +305,9 @@ def store(env):
 
 
 @pytest.fixture
-def scanner(tmp_path, monkeypatch, mistral):
-    """The scanner's SFTP folder `/post` with the three invented letters, each with its recorded Mistral answer."""
+def scanner(tmp_path, monkeypatch, mistral, vault):
+    """The scanner's SFTP folder `/post` with the three invented letters, each with its recorded Mistral answer, released
+    to the DMS as the vault entry SCANNER. `host_key` is the key the fake server shows."""
     root = tmp_path / "sftp"
     (root / "post").mkdir(parents=True)
     for i, name in enumerate(("invoice", "tax_notice", "advertising")):
@@ -295,13 +315,21 @@ def scanner(tmp_path, monkeypatch, mistral):
         (root / "post" / f"scan_{i + 1:03}.pdf").write_bytes(mistral.answer(data, recorded(name)))
     (root / "post" / ".hidden.pdf").write_bytes(b"%PDF-1.4")
     (root / "post" / "note.txt").write_text("not a letter")
-    clients: list[FakeSftp] = []
+    state = SimpleNamespace(root=root, folder=root / "post", clients=[], host_key=HOST_KEY, sources=[])
 
     def connect(source):
+        state.sources.append(source)
+        if source["host_key"] and source["host_key"] != state.host_key:
+            raise sftp_ftp.IntakeError(sftp_ftp.t("intake.host_key_changed", host=source["host"]))
         assert source["password"] == "secret-sftp"
-        clients.append(FakeSftp(root))
-        return clients[-1]
+        state.clients.append(FakeSftp(root))
+        return state.clients[-1], state.host_key
+
+    def connect_ftp(source):
+        state.sources.append(source)
+        return FakeFtp(root), ""
 
     monkeypatch.setitem(sftp_ftp.CONNECT, "sftp", connect)
-    monkeypatch.setitem(sftp_ftp.CONNECT, "ftp", lambda source: FakeFtp(root))
-    return SimpleNamespace(root=root, folder=root / "post", clients=clients)
+    monkeypatch.setitem(sftp_ftp.CONNECT, "ftp", connect_ftp)
+    vault(filestore())
+    return state

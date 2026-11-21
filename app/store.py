@@ -1,6 +1,8 @@
 """SQLite under $DATA_DIR: documents with what was read from them, due dates, cases by file number, events for the
-cockpit, the log, page counts, sources. Originals lie beside it in `originals/`. One connection, one lock: the DMS
-handles a handful of letters a day."""
+cockpit, the log, page counts, the state of each file store. Originals lie beside it in `originals/`. One connection,
+one lock: the DMS handles a handful of letters a day.
+
+Nothing secret lies here: the file stores and the OCR key come from the environment (app/config.py)."""
 
 from __future__ import annotations
 
@@ -36,9 +38,8 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE TABLE IF NOT EXISTS log (time TEXT NOT NULL, who TEXT NOT NULL, what TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS pages (month TEXT PRIMARY KEY, pages INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS sources (id TEXT PRIMARY KEY, data TEXT NOT NULL, error TEXT NOT NULL DEFAULT '',
-    last_fetch TEXT);
-CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS source_state (id TEXT PRIMARY KEY, error TEXT NOT NULL DEFAULT '', last_fetch TEXT,
+    host_key_for TEXT NOT NULL DEFAULT '', host_key TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS intake_seen (source_id TEXT NOT NULL, item_id TEXT NOT NULL, version TEXT NOT NULL,
     PRIMARY KEY (source_id, item_id));
 """
@@ -84,6 +85,21 @@ class Store:
         with self.lock:
             self.db.execute("PRAGMA journal_mode=WAL")
             self.db.executescript(SCHEMA)
+            self._forget_pushed_secrets()
+
+    def _forget_pushed_secrets(self) -> None:
+        """Up to 0.1 the cockpit pushed the file stores with their passwords (`PUT ki/sources`, table `sources`) and the
+        customer's Mistral key (table `settings`) into this database. Both come from the environment now: overwrite
+        what is left of them, free pages and the write-ahead log included."""
+        sql = "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('sources', 'settings')"
+        if not self.db.execute(sql).fetchall():
+            return
+        self.db.execute("PRAGMA secure_delete = ON")
+        self.db.execute("DROP TABLE IF EXISTS sources")
+        self.db.execute("DROP TABLE IF EXISTS settings")
+        self.db.execute("VACUUM")
+        self.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        self.db.execute("PRAGMA secure_delete = OFF")
 
     def _all(self, sql: str, *args) -> list[dict]:
         with self.lock:
@@ -257,40 +273,22 @@ class Store:
             pages,
         )
 
-    # sources and settings
-    def set_sources(self, sources: list[dict]) -> None:
-        with self.lock:
-            keep = {s["id"] for s in sources}
-            for row in self.db.execute("SELECT id FROM sources").fetchall():
-                if row["id"] not in keep:
-                    self.db.execute("DELETE FROM sources WHERE id = ?", (row["id"],))
-            for s in sources:
-                self.db.execute(
-                    "INSERT INTO sources (id, data) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = ?",
-                    (s["id"], json.dumps(s), json.dumps(s)),
-                )
+    # file stores: only what the DMS found out about them; their settings and passwords come from the environment
+    def source_states(self) -> dict[str, dict]:
+        return {r["id"]: r for r in self._all("SELECT * FROM source_state")}
 
-    def sources(self) -> list[dict]:
-        """Each source as pushed, plus `_error` and `_last_fetch` (never sent back with the secrets)."""
-        out = []
-        for r in self._all("SELECT * FROM sources ORDER BY id"):
-            out.append(json.loads(r["data"]) | {"_error": r["error"], "_last_fetch": r["last_fetch"]})
-        return out
+    def source_state(self, source_id: str, error: str, *, fetched: bool = True) -> None:
+        """After a pass (`fetched`) or a check: the error, "" when it worked."""
+        self._run("INSERT OR IGNORE INTO source_state (id) VALUES (?)", source_id)
+        if fetched:
+            self._run("UPDATE source_state SET error = ?, last_fetch = ? WHERE id = ?", error, now(), source_id)
+        else:
+            self._run("UPDATE source_state SET error = ? WHERE id = ?", error, source_id)
 
-    def source_state(self, source_id: str, error: str) -> None:
-        self._run("UPDATE sources SET error = ?, last_fetch = ? WHERE id = ?", error, now(), source_id)
-
-    def value(self, key: str, default: str = "") -> str:
-        row = self._one("SELECT value FROM settings WHERE key = ?", key)
-        return row["value"] if row else default
-
-    def set_value(self, key: str, value: str) -> None:
-        self._run(
-            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?",
-            key,
-            value,
-            value,
-        )
+    def set_host_key(self, source_id: str, where: str, key: str) -> None:
+        """The SFTP server's key, trusted on first use, for this host and port."""
+        self._run("INSERT OR IGNORE INTO source_state (id) VALUES (?)", source_id)
+        self._run("UPDATE source_state SET host_key_for = ?, host_key = ? WHERE id = ?", where, key, source_id)
 
     def seen(self, source_id: str, item_id: str) -> str | None:
         row = self._one("SELECT version FROM intake_seen WHERE source_id = ? AND item_id = ?", source_id, item_id)

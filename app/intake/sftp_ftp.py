@@ -1,11 +1,18 @@
 """SFTP and FTP(S): the scanner or NAS drops letters into one folder. Only that folder, no subfolders; only PDFs and
-images up to 20 MB. Tests replace `CONNECT` with fakes that behave like paramiko's SFTPClient and ftplib.FTP."""
+images up to 20 MB. Tests replace `CONNECT` with fakes that behave like paramiko's SFTPClient and ftplib.FTP; each
+returns `(client, host_key)`.
+
+An SFTP server's key is trusted on first use: the pipeline keeps the first key it saw per source and host, and when the
+server shows another one the connection ends before the password is sent."""
 
 from __future__ import annotations
 
+import base64
 import ftplib
+import hashlib
 import io
 import posixpath
+import socket
 import stat
 
 from app import ocr
@@ -17,13 +24,28 @@ DONE_FOLDER = "done"
 TIMEOUT_S = 30
 
 
+def fingerprint(key) -> str:
+    """As OpenSSH shows it: `ssh-ed25519 SHA256:…`."""
+    digest = base64.b64encode(hashlib.sha256(key.asbytes()).digest()).decode().rstrip("=")
+    return f"{key.get_name()} SHA256:{digest}"
+
+
 def _sftp_connect(source: dict):
     import paramiko
 
-    transport = paramiko.Transport((source["host"], int(source.get("port") or 22)))
-    transport.banner_timeout = TIMEOUT_S
-    transport.connect(username=source.get("user", ""), password=source.get("password", ""))
-    return paramiko.SFTPClient.from_transport(transport)
+    sock = socket.create_connection((source["host"], int(source.get("port") or 22)), timeout=TIMEOUT_S)
+    transport = paramiko.Transport(sock)
+    try:
+        transport.banner_timeout = TIMEOUT_S
+        transport.start_client(timeout=TIMEOUT_S)
+        seen = fingerprint(transport.get_remote_server_key())
+        if source.get("host_key") and seen != source["host_key"]:
+            raise IntakeError(t("intake.host_key_changed", host=source["host"]))
+        transport.auth_password(source.get("user", ""), source.get("password", ""))
+        return paramiko.SFTPClient.from_transport(transport), seen
+    except BaseException:
+        transport.close()
+        raise
 
 
 def _ftp_connect(source: dict):
@@ -32,7 +54,7 @@ def _ftp_connect(source: dict):
     ftp.login(source.get("user", ""), source.get("password", ""))
     if isinstance(ftp, ftplib.FTP_TLS):
         ftp.prot_p()
-    return ftp
+    return ftp, ""
 
 
 CONNECT = {"sftp": _sftp_connect, "ftp": _ftp_connect}
@@ -41,15 +63,18 @@ CONNECT = {"sftp": _sftp_connect, "ftp": _ftp_connect}
 def open_store(source: dict):
     if not source.get("host"):
         raise IntakeError(t("intake.no_host"))
+    name = str(source.get("protocol") or source["kind"]).upper()
     try:
-        client = CONNECT[source["kind"]](source)
+        client, host_key = CONNECT[source["kind"]](source)
     except IntakeError:
         raise
     except Exception as e:  # network, login: the type is enough, never the password
-        raise IntakeError(t("intake.no_connection", kind=source["kind"].upper(), error=type(e).__name__)) from e
+        raise IntakeError(t("intake.no_connection", kind=name, error=type(e).__name__)) from e
     folder = "/" + str(source.get("folder") or "").strip("/")
     move = bool(source.get("move_done"))
-    return SftpStore(client, folder, move) if source["kind"] == "sftp" else FtpStore(client, folder, move)
+    store = SftpStore(client, folder, move) if source["kind"] == "sftp" else FtpStore(client, folder, move)
+    store.host_key = host_key
+    return store
 
 
 def _wanted(name: str, size: int) -> bool:
@@ -57,6 +82,8 @@ def _wanted(name: str, size: int) -> bool:
 
 
 class SftpStore:
+    host_key = ""
+
     def __init__(self, client, folder: str, move: bool) -> None:
         self.client, self.folder, self.move = client, folder, move
 
@@ -91,6 +118,8 @@ class SftpStore:
 
 
 class FtpStore:
+    host_key = ""
+
     def __init__(self, client, folder: str, move: bool) -> None:
         self.client, self.folder, self.move = client, folder, move
 

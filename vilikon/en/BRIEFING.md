@@ -1,6 +1,7 @@
 What for: the company's paper mail. Letters, notices, invoices and court mail arrive from the scanner or as a photo from the phone, are read, filed by case, and their due dates found.
 
 - `search_documents` finds letters by sender, subject, file number or words in the text, `read_document` reads one in full, with the other letters of the same case.
+- When a letter is to be passed on, for example as a mail attachment, `document_file` fetches the original (the scan as a PDF, or the photo) into your work folder. What is sent is always the original, never the text version from the company memory. For confidential letters there is `confidential_document_file`.
 - `due_dates` shows what is due in the next days. Confidential letters appear there with kind and date only.
 - Letters from a court or an attorney are always confidential and go to the owner only.
 - If a letter is marked “check”, something is unclear, usually a due date: never name a date then, say that someone has to look at the letter.

@@ -130,6 +130,44 @@
       }
     },
     {
+      "name": "document_file",
+      "beschreibung": "Holt die Originaldatei eines Briefs (den Scan oder das Foto) in deine Arbeitsmappe unter werkzeuge/…, zum Beispiel als Anhang einer Mail. Vertrauliche Briefe nicht.",
+      "recht": "read",
+      "methode": "GET",
+      "pfad": "ki/documents/{id}/file",
+      "parameter": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Die Nummer des Dokuments"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "confidential_document_file",
+      "beschreibung": "Holt die Originaldatei eines Briefs, auch eines vertraulichen, in deine Arbeitsmappe unter werkzeuge/….",
+      "recht": "confidential",
+      "methode": "GET",
+      "pfad": "ki/confidential/documents/{id}/file",
+      "parameter": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Die Nummer des Dokuments"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
       "name": "due_dates",
       "beschreibung": "Zeigt alle Fristen und Termine aus der Post in einem Zeitraum (ohne Angabe: heute und die nächsten 10 Tage). Vertrauliche nur mit Art und Datum.",
       "recht": "read",

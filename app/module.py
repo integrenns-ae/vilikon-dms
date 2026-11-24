@@ -72,6 +72,10 @@ def describe() -> dict:
             _function(
                 "read_confidential_document", "confidential", "ki/confidential/documents/{id}", id_param, ("id",)
             ),
+            _function("document_file", "read", "ki/documents/{id}/file", id_param, ("id",)),
+            _function(
+                "confidential_document_file", "confidential", "ki/confidential/documents/{id}/file", id_param, ("id",)
+            ),
             _function("due_dates", "read", "ki/due_dates", {"from": _string("from"), "to": _string("to")}),
             _function("receipt_data", "receipts", "ki/receipts/{id}", id_param, ("id",)),
             _function("sources_status", "setup", "ki/pruefen", {}),

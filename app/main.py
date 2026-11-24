@@ -292,6 +292,41 @@ def read_confidential(doc_id: str, _: str = Depends(cockpit)) -> dict:
     return _full(doc_id, True)
 
 
+_ASCII = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss"})
+
+
+def _original_name(doc: dict) -> str:
+    """What the original is called in the employee's work folder and as a mail attachment: day and sender, so the
+    person who gets it knows what it is – not the scanner's running number."""
+    words = f"{doc['date'] or doc['received_at'][:10]} {doc['sender'] or doc['subject'] or doc['name']}"
+    plain = re.sub(r"[^A-Za-z0-9.\- ]+", " ", words.translate(_ASCII))
+    return f"{' '.join(plain.split())[:80]}{doc['suffix']}"
+
+
+def _original(doc_id: str, confidential: bool) -> Response:
+    store = get_store()
+    doc = store.document(doc_id)
+    if not doc or (doc["confidential"] and not confidential):
+        raise Refusal(404, t("error.no_document"))
+    media = "application/pdf" if doc["suffix"] == ".pdf" else ocr.IMAGES.get(doc["suffix"], "application/octet-stream")
+    headers = {
+        "Content-Disposition": f'attachment; filename="{_original_name(doc)}"',
+        "X-Content-Type-Options": "nosniff",
+    }
+    return Response(store.original(doc), media_type=media, headers=headers)
+
+
+@app.get("/ki/documents/{doc_id}/file")
+def document_file(doc_id: str, _: str = Depends(cockpit)) -> Response:
+    """The letter as it arrived (the scan or the photo), so an employee can pass it on, e.g. attach it to a mail."""
+    return _original(doc_id, False)
+
+
+@app.get("/ki/confidential/documents/{doc_id}/file")
+def confidential_file(doc_id: str, _: str = Depends(cockpit)) -> Response:
+    return _original(doc_id, True)
+
+
 @app.get("/ki/due_dates")
 def due_dates(
     since: str = Query("", alias="from"), until: str = Query("", alias="to"), _: str = Depends(cockpit)

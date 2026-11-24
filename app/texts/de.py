@@ -16,6 +16,8 @@ TEXTS = {
     "function.read_document": "Zeigt einen Brief mit seinem ganzen Text, seinen Fristen und den anderen Briefen desselben Vorgangs.",
     "function.search_confidential_documents": "Sucht in der ganzen Post, auch in vertraulichen Briefen.",
     "function.read_confidential_document": "Zeigt einen Brief, auch einen vertraulichen, mit ganzem Text und Fristen.",
+    "function.document_file": "Holt die Originaldatei eines Briefs (den Scan oder das Foto) in deine Arbeitsmappe unter werkzeuge/…, zum Beispiel als Anhang einer Mail. Vertrauliche Briefe nicht.",
+    "function.confidential_document_file": "Holt die Originaldatei eines Briefs, auch eines vertraulichen, in deine Arbeitsmappe unter werkzeuge/….",
     "function.due_dates": "Zeigt alle Fristen und Termine aus der Post in einem Zeitraum (ohne Angabe: heute und die nächsten 10 Tage). Vertrauliche nur mit Art und Datum.",
     "function.receipt_data": "Zeigt die Daten eines Belegs: Absender, Datum, Nummer, Betrag, IBAN, Verwendungszweck.",
     "function.sources_status": "Prüft jede Ablage (den Scanner-Ordner) mit einem kurzen Blick hinein und die Texterkennung: was fehlt, was nicht geht, wie viele Seiten diesen Monat gelesen sind.",

@@ -132,6 +132,28 @@ def test_a_letter_opens_for_whom_the_list_shows_it(client, store):
     assert missing.json() == {"fehler": "Dieses Dokument gibt es nicht."}
 
 
+def test_an_employee_fetches_the_original_to_pass_it_on(cockpit, store):
+    plain = store.add_document(
+        sha="3" * 64, name="scan_0007.pdf", source="test", suffix=".pdf", data=b"%PDF-1.4 a", pages=1
+    )
+    secret = store.add_document(
+        sha="4" * 64, name="scan_0008.pdf", source="test", suffix=".pdf", data=b"%PDF-1.4 b", pages=1
+    )
+    store.update_document(plain["id"], sender="Stadtwerke Gießen", date="2026-11-13")
+    store.update_document(secret["id"], confidential=1, sender="Amtsgericht Musterstadt", date="2026-11-12")
+    r = cockpit.get(f"ki/documents/{plain['id']}/file", who="anna")
+    assert r.status_code == 200 and r.content == b"%PDF-1.4 a" and r.headers["content-type"] == "application/pdf"
+    assert (
+        r.headers["content-disposition"] == 'attachment; filename="2026-11-13 Stadtwerke Giessen.pdf"'
+    )  # the core names the file by it
+    assert cockpit.get(f"ki/documents/{secret['id']}/file", who="anna").json() == {
+        "fehler": "Dieses Dokument gibt es nicht."
+    }
+    r = cockpit.get(f"ki/confidential/documents/{secret['id']}/file", who="anna")
+    assert r.content == b"%PDF-1.4 b" and "2026-11-12 Amtsgericht Musterstadt.pdf" in r.headers["content-disposition"]
+    assert cockpit.client.get(f"/ki/documents/{plain['id']}/file").status_code == 401
+
+
 def test_the_language_comes_from_the_core(vault):
     vault(DMS_LANGUAGE="en")
     assert config.settings.language == "en"  # standalone

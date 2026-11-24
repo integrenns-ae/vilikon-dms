@@ -144,6 +144,8 @@ the mail”, usually the IT Specialist's).
 |---|---|---|
 | `search_documents` | read | GET `ki/documents?query=&kind=&from=&to=` (no confidential documents) |
 | `read_document` | read | GET `ki/documents/{id}`: text, due dates, the other documents of the case |
+| `document_file` | read | GET `ki/documents/{id}/file`: the original (scan or photo), named by date and sender in `Content-Disposition`; the core puts it into the employee's work folder |
+| `confidential_document_file` | confidential | GET `ki/confidential/documents/{id}/file` |
 | `search_confidential_documents` | confidential | GET `ki/confidential/documents?…` |
 | `read_confidential_document` | confidential | GET `ki/confidential/documents/{id}` |
 | `due_dates` | read | GET `ki/due_dates?from=&to=` (default today + 10 days); confidential ones only with kind and date |

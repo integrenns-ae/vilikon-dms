@@ -16,6 +16,8 @@ TEXTS = {
     "function.read_document": "Shows a letter with its full text, its due dates and the other letters of the same case.",
     "function.search_confidential_documents": "Searches all mail, confidential letters included.",
     "function.read_confidential_document": "Shows a letter, a confidential one too, with full text and due dates.",
+    "function.document_file": "Fetches a letter's original file (the scan or the photo) into your work folder under werkzeuge/…, for example as a mail attachment. Not confidential letters.",
+    "function.confidential_document_file": "Fetches a letter's original file, a confidential one too, into your work folder under werkzeuge/….",
     "function.due_dates": "Shows every due date and appointment from the mail in a period (without one: today and the next 10 days). Confidential ones only with kind and date.",
     "function.receipt_data": "Shows the data of a receipt: sender, date, number, amount, IBAN, payment reference.",
     "function.sources_status": "Checks every file store (the scanner folder) with a quick look inside, and the text recognition: what is missing, what fails, how many pages were read this month.",

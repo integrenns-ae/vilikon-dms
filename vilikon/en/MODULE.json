@@ -130,6 +130,44 @@
       }
     },
     {
+      "name": "document_file",
+      "beschreibung": "Fetches a letter's original file (the scan or the photo) into your work folder under werkzeuge/…, for example as a mail attachment. Not confidential letters.",
+      "recht": "read",
+      "methode": "GET",
+      "pfad": "ki/documents/{id}/file",
+      "parameter": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The document's number"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "confidential_document_file",
+      "beschreibung": "Fetches a letter's original file, a confidential one too, into your work folder under werkzeuge/….",
+      "recht": "confidential",
+      "methode": "GET",
+      "pfad": "ki/confidential/documents/{id}/file",
+      "parameter": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The document's number"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
       "name": "due_dates",
       "beschreibung": "Shows every due date and appointment from the mail in a period (without one: today and the next 10 days). Confidential ones only with kind and date.",
       "recht": "read",

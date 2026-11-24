@@ -288,5 +288,25 @@
       "name": "Mail",
       "intervall_min": 15
     }
+  ],
+  "einstellungen": [
+    {
+      "name": "DMS_INTERVAL_MIN",
+      "art": "zahl",
+      "titel": "Check the file stores every … minutes",
+      "beschreibung": "How often Mail looks into the scanner folders and other file stores for new letters. 0 = only on request.",
+      "vorgabe": 10,
+      "min": 0,
+      "max": 1440
+    },
+    {
+      "name": "DMS_ARCHIVE_DAYS",
+      "art": "zahl",
+      "titel": "Only file old letters from … days",
+      "beschreibung": "On a file store's first fetch: a letter dated more than this many days back is filed but not announced. 0 = every letter is announced.",
+      "vorgabe": 30,
+      "min": 0,
+      "max": 3650
+    }
   ]
 }

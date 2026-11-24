@@ -90,7 +90,22 @@ def describe() -> dict:
             {"titel": t("card.pages_title"), "pfad": "ki/karten/pages"},
         ],
         "anschluesse": [{"standard": "vilikon.wissen/1", "name": t("module.knowledge_name"), "intervall_min": 15}],
+        # What the owner sets on the cockpit's tools page; the cockpit hands each value over as the variable `name`
+        # (app/config.py). The defaults are the ones the DMS has on its own.
+        "einstellungen": [
+            _setting("DMS_INTERVAL_MIN", "interval", vorgabe=10, min=0, max=1440),
+            _setting("DMS_ARCHIVE_DAYS", "archive_days", vorgabe=30, min=0, max=3650),
+        ],
     }
+
+
+def _setting(name: str, key: str, **number) -> dict:
+    return {
+        "name": name,
+        "art": "zahl",
+        "titel": t(f"setting.{key}"),
+        "beschreibung": t(f"setting.{key}_text"),
+    } | number
 
 
 def render(language: str) -> str:

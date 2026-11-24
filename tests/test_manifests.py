@@ -62,11 +62,20 @@ def check_module(m: dict) -> None:
     for k in m["karten"]:
         _text(k["titel"], 60)
         assert PATH.match(k["pfad"]) and not PLACEHOLDER.search(k["pfad"]), k
+    settings = set()
+    for e in m["einstellungen"]:  # the core's tool_controls.parse
+        assert re.match(r"^[A-Z][A-Z0-9_]{1,40}$", e["name"]) and e["name"] not in settings, e
+        assert e["art"] == "zahl" and e["min"] <= e["vorgabe"] <= e["max"], e
+        _text(e["titel"], 80)
+        _text(e["beschreibung"], 400)
+        settings.add(e["name"])
+    assert len(settings) <= 12
     assert set(m) <= {"standard", "schluessel", "version", "name", "beschreibung", "menue", "rechte", "funktionen"} | {
         "ereignisse",
         "ereignisse_intervall_min",
         "karten",
         "anschluesse",
+        "einstellungen",
     }
 
 
@@ -88,6 +97,24 @@ def test_the_setup_right_and_its_functions():
         ("sources_status", "GET", "ki/pruefen"),
         ("sync_now", "POST", "ki/sync"),
     }
+
+
+def test_the_settings_are_variables_the_dms_reads_with_its_own_defaults(monkeypatch):
+    """What the owner sets in the cockpit arrives as these variables; without the cockpit the same defaults hold."""
+    m = json.loads(module.FILES["de"].read_text(encoding="utf-8"))
+    assert [(e["name"], e["art"], e["vorgabe"], e["min"]) for e in m["einstellungen"]] == [
+        ("DMS_INTERVAL_MIN", "zahl", 10, 0),
+        ("DMS_ARCHIVE_DAYS", "zahl", 30, 0),
+    ]
+    assert all(e["titel"] and e["beschreibung"] and e["vorgabe"] <= e["max"] for e in m["einstellungen"])
+    for name in ("DMS_INTERVAL_MIN", "DMS_ARCHIVE_DAYS"):
+        monkeypatch.delenv(name, raising=False)
+    own = config.Settings()
+    assert (own.intake_interval_min, own.archive_days) == (10, 30)
+    monkeypatch.setenv("DMS_INTERVAL_MIN", "60")
+    monkeypatch.setenv("DMS_ARCHIVE_DAYS", "0")
+    own = config.Settings()
+    assert (own.intake_interval_min, own.archive_days) == (60, 0)
 
 
 def test_every_announced_path_answers(cockpit, monkeypatch):

@@ -288,5 +288,25 @@
       "name": "Post",
       "intervall_min": 15
     }
+  ],
+  "einstellungen": [
+    {
+      "name": "DMS_INTERVAL_MIN",
+      "art": "zahl",
+      "titel": "Ablagen abfragen alle … Minuten",
+      "beschreibung": "Wie oft die Post in den Scanner-Ordnern und anderen Ablagen nach neuen Briefen schaut. 0 = nur auf Zuruf.",
+      "vorgabe": 10,
+      "min": 0,
+      "max": 1440
+    },
+    {
+      "name": "DMS_ARCHIVE_DAYS",
+      "art": "zahl",
+      "titel": "Alte Briefe nur ablegen ab … Tagen",
+      "beschreibung": "Beim ersten Abruf einer Ablage: Ein Brief, dessen Datum mehr als so viele Tage zurückliegt, wird abgelegt, aber nicht gemeldet. 0 = jeder Brief wird gemeldet.",
+      "vorgabe": 30,
+      "min": 0,
+      "max": 3650
+    }
   ]
 }

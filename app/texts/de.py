@@ -4,6 +4,15 @@ TEXTS = {
     "module.description": "Briefe, Bescheide und Belege aus der Ablage und vom Handy: gelesen, abgelegt, Fristen erkannt.",
     "module.menu": "Post",
     "module.knowledge_name": "Post",
+    "setting.interval": "Ablagen abfragen alle … Minuten",
+    "setting.interval_text": (
+        "Wie oft die Post in den Scanner-Ordnern und anderen Ablagen nach neuen Briefen schaut. 0 = nur auf Zuruf."
+    ),
+    "setting.archive_days": "Alte Briefe nur ablegen ab … Tagen",
+    "setting.archive_days_text": (
+        "Beim ersten Abruf einer Ablage: Ein Brief, dessen Datum mehr als so viele Tage zurückliegt, wird abgelegt, "
+        "aber nicht gemeldet. 0 = jeder Brief wird gemeldet."
+    ),
     "right.read_title": "Post einsehen",
     "right.read_text": "Darf eingegangene Briefe suchen und lesen, außer vertraulichen, und sieht die Fristen.",
     "right.confidential_title": "Vertrauliche Post einsehen",

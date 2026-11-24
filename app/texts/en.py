@@ -4,6 +4,15 @@ TEXTS = {
     "module.description": "Letters, notices and receipts from the file store and the phone: read, filed, due dates found.",
     "module.menu": "Mail",
     "module.knowledge_name": "Mail",
+    "setting.interval": "Check the file stores every … minutes",
+    "setting.interval_text": (
+        "How often Mail looks into the scanner folders and other file stores for new letters. 0 = only on request."
+    ),
+    "setting.archive_days": "Only file old letters from … days",
+    "setting.archive_days_text": (
+        "On a file store's first fetch: a letter dated more than this many days back is filed but not announced. "
+        "0 = every letter is announced."
+    ),
     "right.read_title": "See the mail",
     "right.read_text": "May search and read incoming letters, except confidential ones, and sees the due dates.",
     "right.confidential_title": "See confidential mail",

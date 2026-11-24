@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- You now set two values in the cockpit, on the “Tools” page under “Manage”: how often Mail looks into the file
+  stores for new letters (so far fixed at 10 minutes) and from how many days an old letter on a file store's first
+  fetch is only filed instead of announced (so far fixed at 30).
 - Every letter on the “Mail” page shows a small preview: the scan's first page or the photo. A click on it opens the
   whole letter large in a window that closes with the X, with Escape or with a click beside it; it can be downloaded
   from there as well. A click on the title still opens it in a new tab.

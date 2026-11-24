@@ -2,6 +2,9 @@
 
 ## Unveröffentlicht
 
+- Zwei Werte stellst du jetzt im Cockpit ein, auf der Seite „Werkzeuge“ unter „Verwalten“: wie oft die Post in den
+  Ablagen nach neuen Briefen schaut (bisher fest 10 Minuten) und ab wie vielen Tagen ein alter Brief beim ersten
+  Abruf einer Ablage nur abgelegt statt gemeldet wird (bisher fest 30).
 - Jeder Brief zeigt auf der Seite „Post“ eine kleine Vorschau: die erste Seite des Scans oder das Foto. Ein Klick
   darauf öffnet den ganzen Brief groß in einem Fenster, das sich mit dem Kreuz, mit Escape oder mit einem Klick
   daneben schließt; herunterladen lässt er sich dort auch. Ein Klick auf den Titel öffnet ihn wie bisher in einem

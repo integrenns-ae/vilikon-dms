@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+## 0.4.0
+
 - Mitarbeiter mit dem Recht „Post einsehen“ holen das Original eines Briefs (den Scan oder das Foto) in ihre
   Arbeitsmappe und können es so an eine Mail hängen; für vertrauliche Briefe braucht es „Vertrauliche Post einsehen“.
   Die Datei heißt nach Datum und Absender.

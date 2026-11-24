@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.0
+
 - Employees with the right “See mail” fetch a letter's original (the scan or the photo) into their work folder and
   can attach it to a mail; confidential letters need “See confidential mail”. The file is named after date and sender.
 

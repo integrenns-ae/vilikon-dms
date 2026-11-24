@@ -1,7 +1,7 @@
 {
   "standard": "vilikon.adapter/1",
   "slug": "dms",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "build": "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && cd oberflaeche && npm ci && npm run build",
   "start": ".venv/bin/python -m app",
   "check": "ki/pruefen",

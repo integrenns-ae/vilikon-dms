@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+## 0.4.1
+
 - Zwei Werte stellst du jetzt im Cockpit ein, auf der Seite „Werkzeuge“ unter „Verwalten“: wie oft die Post in den
   Ablagen nach neuen Briefen schaut (bisher fest 10 Minuten) und ab wie vielen Tagen ein alter Brief beim ersten
   Abruf einer Ablage nur abgelegt statt gemeldet wird (bisher fest 30).

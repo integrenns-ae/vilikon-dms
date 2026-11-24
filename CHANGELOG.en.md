@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.1
+
 - You now set two values in the cockpit, on the “Tools” page under “Manage”: how often Mail looks into the file
   stores for new letters (so far fixed at 10 minutes) and from how many days an old letter on a file store's first
   fetch is only filed instead of announced (so far fixed at 30).

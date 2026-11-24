@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Camera, CheckCircle2, Inbox, Loader2, Lock, TriangleAlert } from "lucide-react";
 import { Seitenkopf } from "@/components/AppShell";
+import { LetterPreview } from "@/components/LetterPreview";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -97,7 +98,7 @@ export function MailPage() {
   );
 }
 
-/** One row per letter; the whole row opens the original in a new tab. */
+/** One row per letter: its small preview opens it large in a dialog, the rest of the row opens the original in a new tab. */
 function Letters({ rows }: { rows: Letter[] }) {
   return (
     <Card>
@@ -105,7 +106,7 @@ function Letters({ rows }: { rows: Letter[] }) {
         <THead>
           <TR>
             <TH className="hidden sm:table-cell">{T.mail.columns.date}</TH>
-            <TH>{T.mail.columns.letter}</TH>
+            <TH colSpan={2}>{T.mail.columns.letter}</TH>
             <TH className="hidden md:table-cell">{T.mail.columns.kind}</TH>
             <TH>{T.mail.columns.status}</TH>
           </TR>
@@ -117,6 +118,9 @@ function Letters({ rows }: { rows: Letter[] }) {
             return (
               <TR key={l.id} onClick={() => window.open(href, "_blank", "noopener")}>
                 <TD className="hidden whitespace-nowrap align-top text-muted-foreground sm:table-cell">{tag(l.date)}</TD>
+                <TD className="w-11 pr-0 align-top">
+                  <LetterPreview href={href} name={l.subject || l.title} />
+                </TD>
                 <TD className="align-top">
                   <a
                     href={href}

@@ -193,7 +193,9 @@ yet". Version 0.1.0 kept pushed sources and the customer's key in the store; 0.2
 `GET /` (menu entry „Post“ / "Mail", `/werkzeug/dms/` from outside): the inbox, the review list, the page count and
 the upload for phone photos; for the owner also the file stores with their errors, a "Fetch now" button
 (`POST /api/sync`) and, after a changed SFTP host key, a button to accept it (`POST /api/sources/{id}/trust`).
-`GET /api/documents` feeds it; a row opens the original (`GET /api/documents/{id}/file`, confidential ones only for the
+`GET /api/documents` feeds it; each row shows a small preview of the original (a PDF's first page drawn with pdf.js,
+loaded on demand, or the photo) that opens large in a dialog, and the row itself opens the original in a new tab
+(`GET /api/documents/{id}/file`, confidential ones only for the
 owner).
 
 The page is the core's Vilikon app template (`oberflaeche/`, React + Vite + Tailwind, variant „statisch“): the cockpit's

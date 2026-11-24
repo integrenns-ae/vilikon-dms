@@ -2,6 +2,11 @@
 
 ## Unveröffentlicht
 
+- Jeder Brief zeigt auf der Seite „Post“ eine kleine Vorschau: die erste Seite des Scans oder das Foto. Ein Klick
+  darauf öffnet den ganzen Brief groß in einem Fenster, das sich mit dem Kreuz, mit Escape oder mit einem Klick
+  daneben schließt; herunterladen lässt er sich dort auch. Ein Klick auf den Titel öffnet ihn wie bisher in einem
+  neuen Tab.
+
 ## 0.4.0
 
 - Mitarbeiter mit dem Recht „Post einsehen“ holen das Original eines Briefs (den Scan oder das Foto) in ihre

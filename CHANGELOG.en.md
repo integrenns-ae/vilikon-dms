@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Every letter on the “Mail” page shows a small preview: the scan's first page or the photo. A click on it opens the
+  whole letter large in a window that closes with the X, with Escape or with a click beside it; it can be downloaded
+  from there as well. A click on the title still opens it in a new tab.
+
 ## 0.4.0
 
 - Employees with the right “See mail” fetch a letter's original (the scan or the photo) into their work folder and

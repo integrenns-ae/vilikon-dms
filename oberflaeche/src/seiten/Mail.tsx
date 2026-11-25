@@ -1,11 +1,13 @@
 import { useRef, useState } from "react";
-import { Camera, CheckCircle2, Inbox, Loader2, Lock, TriangleAlert } from "lucide-react";
+import { Camera, Check, CheckCircle2, Inbox, Loader2, Lock, TriangleAlert } from "lucide-react";
 import { Seitenkopf } from "@/components/AppShell";
 import { LetterPreview } from "@/components/LetterPreview";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
+import { Input, Label } from "@/components/ui/input";
 import { Leer } from "@/components/ui/leer";
 import { ZeilenSkeleton } from "@/components/ui/skeleton";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -84,7 +86,7 @@ export function MailPage() {
               </p>
             </div>
             {rows.length > 0 ? (
-              <Letters rows={rows} />
+              <Letters rows={rows} reload={neuLaden} />
             ) : shown === "review" ? (
               <Leer icon={CheckCircle2} titel={T.mail.reviewEmptyTitle} text={T.mail.reviewEmptyText} />
             ) : (
@@ -99,9 +101,11 @@ export function MailPage() {
 }
 
 /** One row per letter: its small preview opens it large in a dialog, the rest of the row opens the original in a new tab. */
-function Letters({ rows }: { rows: Letter[] }) {
+function Letters({ rows, reload }: { rows: Letter[]; reload: () => void }) {
+  const [checking, setChecking] = useState<Letter | null>(null);
   return (
     <Card>
+      <Checked letter={checking} close={() => setChecking(null)} reload={reload} />
       <Table>
         <THead>
           <TR>
@@ -146,6 +150,20 @@ function Letters({ rows }: { rows: Letter[] }) {
                       <span>{l.reason}</span>
                     </div>
                   )}
+                  {l.status === "review" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setChecking(l);
+                      }}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      {T.mail.checked}
+                    </Button>
+                  )}
                 </TD>
                 <TD className="hidden align-top md:table-cell">
                   <div className="flex flex-wrap gap-1">
@@ -167,5 +185,65 @@ function Letters({ rows }: { rows: Letter[] }) {
         </TBody>
       </Table>
     </Card>
+  );
+}
+
+/** "Checked": the person looked at the letter; it leaves the review list. A date they read in it becomes a due date. */
+function Checked({ letter, close, reload }: { letter: Letter | null; close: () => void; reload: () => void }) {
+  const [due, setDue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+
+  function done() {
+    setDue("");
+    close();
+  }
+
+  async function save() {
+    if (!letter) return;
+    setSaving(true);
+    try {
+      const r = await api<{ text: string }>(`api/documents/${encodeURIComponent(letter.id)}/checked`, {
+        method: "POST",
+        body: JSON.stringify({ due }),
+      });
+      toast(r.text, "ok");
+      done();
+      reload();
+    } catch (e) {
+      toast((e as Error).message || T.fehlerAllgemein, "fehler");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog
+      offen={!!letter}
+      schliessen={done}
+      titel={T.mail.checkedTitle}
+      beschreibung={letter ? letter.subject || letter.title : ""}
+      fuss={
+        <>
+          <Button variant="ghost" onClick={done}>
+            {T.abbrechen}
+          </Button>
+          <Button onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" /> : <Check className="h-4 w-4" />}
+            {T.mail.checked}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3 text-sm">
+        {letter?.reason && <p className="text-muted-foreground">{letter.reason}</p>}
+        <p>{T.mail.checkedText}</p>
+        <div>
+          <Label htmlFor="checked-due">{T.mail.checkedDue}</Label>
+          <Input id="checked-due" type="date" value={due} onChange={(e) => setDue(e.target.value)} className="max-w-[12rem]" />
+          <p className="mt-1 text-xs text-muted-foreground">{T.mail.checkedDueHelp}</p>
+        </div>
+      </div>
+    </Dialog>
   );
 }

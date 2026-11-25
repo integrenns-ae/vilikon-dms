@@ -2,6 +2,12 @@
 
 ## Unveröffentlicht
 
+- Ein Brief unter „Zu prüfen“ hat jetzt den Knopf „Geprüft“: Hast du im Brief nachgesehen, wird er damit abgelegt
+  und verschwindet aus der Liste. Nennt der Brief eine Frist, trägst du ihr Datum dabei ein; sie steht dann bei den
+  Fristen.
+- Die Kachel „Post“ im Dashboard ist bei Briefen zu prüfen und bei nahen Fristen gelb statt rot. Rot wird sie nur
+  noch an dem Tag, an dem eine Frist fällig ist.
+
 ## 0.4.1
 
 - Zwei Werte stellst du jetzt im Cockpit ein, auf der Seite „Werkzeuge“ unter „Verwalten“: wie oft die Post in den

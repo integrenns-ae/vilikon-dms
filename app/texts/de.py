@@ -146,6 +146,8 @@ TEXTS = {
     # log
     "log.received": "„{name}“ eingegangen ({source})",
     "log.read": "Gelesen: {title} ({kind})",
+    "log.checked": "Geprüft und abgelegt: {title}",
+    "log.checked_due": "Geprüft und abgelegt, Frist am {date}: {title}",
     "log.host_key_accepted": "Neuen Schlüssel des SFTP-Servers für „{source}“ angenommen",
     # fetching and the check
     "sync.started": "Die Ablagen werden jetzt im Hintergrund abgeholt. Ob es geklappt hat, zeigt in einer Minute die Prüfung.",
@@ -165,9 +167,12 @@ TEXTS = {
     "error.no_receipt": "Diesen Beleg gibt es nicht.",
     "error.not_owner": "Das darf nur der Inhaber.",
     "error.no_new_host_key": "Für diese Ablage gibt es keinen neuen Schlüssel zum Annehmen.",
+    "error.not_on_review": "Dieser Brief steht nicht auf „prüfen“.",
     "error.path": "Diesen Pfad gibt es nicht.",
     "error.ui_missing": "Die Seite ist nicht gebaut. Der IT-Betreuer baut das Werkzeug neu (Build in ADAPTER.json).",
     "error.input": "Die Angaben passen nicht: {error}",
     # page
+    "page.checked": "Der Brief ist als geprüft abgelegt.",
+    "page.checked_due": "Der Brief ist als geprüft abgelegt, die Frist ist eingetragen.",
     "page.trusted": "Der neue Schlüssel gilt. Die Ablage wird jetzt abgeholt.",
 }

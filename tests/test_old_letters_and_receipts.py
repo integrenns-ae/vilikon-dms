@@ -181,7 +181,7 @@ def test_a_receipt_without_amount_sender_or_date_goes_on_review(
     (event,) = cockpit.poll_events()
     assert event["art"] == "review" and event["data"]["reason"] == reason
     assert event["text"].startswith(words) and "selbst erfassen" in event["text"]
-    assert cockpit.get("ki/karten/mail").json()["ton"] == "kritisch"
+    assert cockpit.get("ki/karten/mail").json()["ton"] == "warn"
 
 
 def test_a_receipt_on_review_for_something_else_says_both(cockpit, scanner, mistral, store):

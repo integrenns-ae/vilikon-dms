@@ -9,6 +9,7 @@ const de = {
   app: "Post",
   untertitel: "Werkzeug",
   schliessen: "Schließen",
+  abbrechen: "Abbrechen",
   fehlerAllgemein: "Das hat nicht geklappt. Versuch es gleich noch einmal.",
   mail: {
     title: "Post",
@@ -34,6 +35,11 @@ const de = {
     previewExample: "Das sind Beispieldaten: Zu diesem Brief gibt es kein Original.",
     previewMorePages: (shown: number, total: number) => `Das sind die ersten ${shown} von ${total} Seiten. Für den Rest lade den Brief herunter.`,
     fileNumber: (n: string) => `Az. ${n}`,
+    checked: "Geprüft",
+    checkedTitle: "Brief geprüft?",
+    checkedText: "Hast du im Brief nachgesehen, wird er abgelegt und steht nicht mehr unter „Zu prüfen“.",
+    checkedDue: "Frist im Brief",
+    checkedDueHelp: "Nur wenn der Brief ein Datum nennt: Es wird als Frist eingetragen. Sonst leer lassen.",
   },
   status: { new: "Wird gelesen", waiting: "Wartet", done: "Abgelegt", review: "Prüfen", error: "Fehler" },
   stores: {
@@ -55,6 +61,7 @@ const en: typeof de = {
   app: "Mail",
   untertitel: "Tool",
   schliessen: "Close",
+  abbrechen: "Cancel",
   fehlerAllgemein: "That didn't work. Please try again in a moment.",
   mail: {
     title: "Mail",
@@ -80,6 +87,11 @@ const en: typeof de = {
     previewExample: "This is example data: there is no original for this letter.",
     previewMorePages: (shown: number, total: number) => `These are the first ${shown} of ${total} pages. Download the letter for the rest.`,
     fileNumber: (n: string) => `Ref. ${n}`,
+    checked: "Checked",
+    checkedTitle: "Letter checked?",
+    checkedText: "Once you have looked at the letter, it is filed and no longer listed under “To check”.",
+    checkedDue: "Due date in the letter",
+    checkedDueHelp: "Only if the letter names a date: it is entered as a due date. Otherwise leave it empty.",
   },
   status: { new: "Reading", waiting: "Waiting", done: "Filed", review: "Check", error: "Error" },
   stores: {

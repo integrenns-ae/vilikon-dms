@@ -1,7 +1,7 @@
 """The tool's token on every call, what the DMS says about itself, and the page behind the cockpit's login."""
 
 import pytest
-from conftest import TOKEN, browser
+from conftest import TODAY, TOKEN, browser
 
 from app import config
 
@@ -161,3 +161,38 @@ def test_the_language_comes_from_the_core(vault):
     assert config.settings.language == "de"  # the instance's language wins
     vault(VILIKON_LANGUAGE="fr", DMS_LANGUAGE=None)
     assert config.settings.language == "de"
+
+
+def test_a_checked_letter_leaves_the_review_list(client, cockpit, store):
+    owner, employee = browser(owner=True, role="betreiber"), browser()
+    docs = [
+        store.add_document(sha=str(i) * 64, name=f"{i}.pdf", source="test", suffix=".pdf", data=b"%PDF-1.4", pages=1)
+        for i in (1, 2, 3)
+    ]
+    first, second, court = (d["id"] for d in docs)
+    for doc_id in (first, second, court):
+        store.update_document(doc_id, status="review", reason="deadline_unclear", kind="notice", subject="Bescheid")
+    store.update_document(court, kind="court", confidential=1)
+    assert cockpit.get("ki/karten/mail").json()["ton"] == "warn"  # unclear is not urgent
+
+    def checked(doc_id: str, headers: dict, **body):
+        return client.post(f"/api/documents/{doc_id}/checked", headers=headers, json=body)
+
+    assert checked(first, employee, due="morgen").json() == {"fehler": "Die Angaben passen nicht: due"}
+    day = TODAY.isoformat()
+    assert "Frist" in checked(first, employee, due=day).json()["text"]
+    assert (store.document(first)["status"], store.document(first)["reason"]) == ("done", "")
+    assert [(d["kind"], d["date"]) for d in store.due_dates(first)] == [("other", day)]
+    assert checked(first, employee).status_code == 409  # only once
+
+    assert checked(second, employee).status_code == 200  # no date in the letter: just filed
+    assert store.due_dates(second) == []
+    assert checked(court, employee).status_code == 404  # confidential: only the owner
+    assert checked(court, owner, due="2026-12-01").status_code == 200
+    assert [d["kind"] for d in store.due_dates(court)] == ["court"]
+    assert checked("missing", owner).status_code == 404
+
+    assert client.get("/api/documents", headers=owner).json()["review"] == []
+    card = cockpit.get("ki/karten/mail").json()
+    assert (card["ton"], card["zahl"]) == ("kritisch", "2")  # one of the dates entered is due today
+    assert any("Geprüft und abgelegt, Frist am" in row["what"] for row in store.log_between("0", "9"))

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- A letter under “To check” now has the button “Checked”: once you have looked at the letter, this files it and
+  takes it off the list. If the letter names a due date, you enter it there; it then shows among the due dates.
+- The “Mail” tile on the dashboard is yellow instead of red for letters to check and for due dates coming up. It
+  turns red only on the day something is due.
+
 ## 0.4.1
 
 - You now set two values in the cockpit, on the “Tools” page under “Manage”: how often Mail looks into the file

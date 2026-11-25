@@ -218,6 +218,16 @@ class Store:
                     (f"{doc_id}-{i}", doc_id, d["kind"], d["date"], d.get("amount"), d.get("text", "")),
                 )
 
+    def add_due_date(self, doc_id: str, kind: str, day: str) -> None:
+        """A date a person read in the letter, besides what was recognised."""
+        self._run(
+            "INSERT INTO due_dates (id, document_id, kind, date) VALUES (?, ?, ?, ?)",
+            f"{doc_id}-{uuid.uuid4().hex[:8]}",
+            doc_id,
+            kind,
+            day,
+        )
+
     def due_dates(self, doc_id: str) -> list[dict]:
         return self._all("SELECT * FROM due_dates WHERE document_id = ? ORDER BY date", doc_id)
 

@@ -4,7 +4,7 @@ What for: the company's paper mail. Letters, notices, invoices and court mail ar
 - When a letter is to be passed on, for example as a mail attachment, `document_file` fetches the original (the scan as a PDF, or the photo) into your work folder. What is sent is always the original, never the text version from the company memory. For confidential letters there is `confidential_document_file`.
 - `due_dates` shows what is due in the next days. Confidential letters appear there with kind and date only.
 - Letters from a court or an attorney are always confidential and go to the owner only.
-- If a letter is marked “check”, something is unclear, usually a due date: never name a date then, say that someone has to look at the letter.
+- If a letter is marked “check”, something is unclear, usually a due date: never name a date then, say that someone has to look at the letter. Whoever has looked confirms it on the “Mail” page under “To check” with “Checked”, entering the due date if the letter names one; after that the letter is filed.
 - For the bookkeeping, `receipt_data` gives a receipt's sender, number, amount, IBAN and payment reference. If a receipt's amount, sender or date was not recognised, it does not go to the bookkeeping as a receipt but is marked “check”.
 - Older letters that already lay in a scanner folder when it was first fetched are only filed: they can be found and their due dates are in `due_dates`, but no task comes from them.
 

@@ -4,7 +4,7 @@ Wofür: die Briefpost des Betriebs. Briefe, Bescheide, Rechnungen und Post vom G
 - Soll ein Brief weitergegeben werden, etwa als Anhang einer Mail, holst du mit `document_file` das Original (den Scan als PDF oder das Foto) in deine Arbeitsmappe. Verschickt wird immer das Original, nie die Textfassung aus dem Firmengedächtnis. Für vertrauliche Briefe gibt es `confidential_document_file`.
 - `due_dates` zeigt, was in den nächsten Tagen fällig ist. Vertrauliche Briefe stehen dort nur mit Art und Datum.
 - Briefe vom Gericht oder Anwalt sind immer vertraulich und gehen nur an den Inhaber.
-- Steht ein Brief auf „prüfen“, ist etwas unklar, meist eine Frist: nenne dann nie ein Datum, sondern sag, dass jemand im Brief nachsehen muss.
+- Steht ein Brief auf „prüfen“, ist etwas unklar, meist eine Frist: nenne dann nie ein Datum, sondern sag, dass jemand im Brief nachsehen muss. Wer nachgesehen hat, bestätigt das auf der Seite „Post“ unter „Zu prüfen“ mit „Geprüft“ und trägt dabei die Frist ein, falls der Brief eine nennt; danach ist der Brief abgelegt.
 - Für die Buchhaltung liefert `receipt_data` Absender, Nummer, Betrag, IBAN und Verwendungszweck eines Belegs. Wurde bei einem Beleg der Betrag, der Absender oder das Datum nicht erkannt, kommt er nicht als Beleg in die Buchhaltung, sondern steht auf „prüfen“.
 - Ältere Briefe, die beim ersten Abholen eines Scanner-Ordners schon dort lagen, werden nur abgelegt: Sie sind auffindbar, ihre Fristen stehen in `due_dates`, aber daraus entsteht keine Aufgabe.
 

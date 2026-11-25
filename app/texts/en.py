@@ -146,6 +146,8 @@ TEXTS = {
     # log
     "log.received": "“{name}” arrived ({source})",
     "log.read": "Read: {title} ({kind})",
+    "log.checked": "Checked and filed: {title}",
+    "log.checked_due": "Checked and filed, due on {date}: {title}",
     "log.host_key_accepted": "Accepted the SFTP server's new key for “{source}”",
     # fetching and the check
     "sync.started": "The file stores are being fetched in the background. In a minute the check shows whether it worked.",
@@ -165,9 +167,12 @@ TEXTS = {
     "error.no_receipt": "This receipt does not exist.",
     "error.not_owner": "Only the owner may do this.",
     "error.no_new_host_key": "There is no new key to accept for this file store.",
+    "error.not_on_review": "This letter is not marked “check”.",
     "error.path": "This path does not exist.",
     "error.ui_missing": "The page is not built. The IT Specialist rebuilds the tool (the build in ADAPTER.json).",
     "error.input": "The input does not fit: {error}",
     # page
+    "page.checked": "The letter is filed as checked.",
+    "page.checked_due": "The letter is filed as checked, the due date is entered.",
     "page.trusted": "The new key counts now. The file store is being fetched.",
 }

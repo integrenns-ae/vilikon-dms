@@ -26,7 +26,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import BinaryIO
 
-from fastapi import Depends, FastAPI, File, Query, Request, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.exceptions import HTTPException
@@ -393,7 +393,9 @@ def card_mail(_: str = Depends(cockpit)) -> dict:
     for d in soon[: 8 - len(lines)]:
         name = t("due.confidential") if d["confidential"] else (d["sender"] or d["subject"])
         lines.append({"text": f"{name[:60]}: {t('due.' + d['kind'])}", "wert": d["date"]})
-    tone = "kritisch" if review else ("warn" if soon else "gut")
+    # red only for what is due today; a letter to check is unclear, not urgent
+    due_today = any(d["date"] == today().isoformat() for d in soon)
+    tone = "kritisch" if due_today else ("warn" if review or soon else "gut")
     return {"zahl": str(len(review) + len(soon)), "text": t("card.mail_text"), "ton": tone, "zeilen": lines}
 
 
@@ -636,6 +638,27 @@ def page_file(doc_id: str, request: Request, who: str = Depends(person)) -> Resp
     media = "application/pdf" if doc["suffix"] == ".pdf" else ocr.IMAGES.get(doc["suffix"], "")
     headers = {"Content-Disposition": "inline" if media else "attachment", "X-Content-Type-Options": "nosniff"}
     return Response(store.original(doc), media_type=media or "application/octet-stream", headers=headers)
+
+
+@app.post("/api/documents/{doc_id}/checked")
+def page_checked(doc_id: str, request: Request, due: str = Body("", embed=True), who: str = Depends(person)) -> dict:
+    """Someone looked at a letter on the review list: it is filed. `due` is the date they read in it, if the letter
+    names one (the DMS never guesses it). Nothing is announced to the cockpit: the person who checked knows."""
+    store = get_store()
+    doc = store.document(doc_id)
+    if not doc or (doc["confidential"] and not is_owner(request)):
+        raise Refusal(404, t("error.no_document"))
+    if doc["status"] != "review":
+        raise Refusal(409, t("error.not_on_review"))
+    if due:
+        try:
+            due = date.fromisoformat(due).isoformat()
+        except ValueError:
+            raise Refusal(400, t("error.input", error="due")) from None
+        store.add_due_date(doc_id, doc["kind"] if doc["kind"] in ocr.ALWAYS_CONFIDENTIAL else "other", due)
+    store.update_document(doc_id, status="done", reason="")
+    store.log(who, t("log.checked_due" if due else "log.checked", title=pipeline.title(doc), date=due))
+    return {"text": t("page.checked_due" if due else "page.checked")}
 
 
 @app.post("/api/sync")

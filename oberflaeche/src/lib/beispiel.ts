@@ -48,6 +48,7 @@ export function beispielAntwort(pfad: string, init: RequestInit): unknown {
   if (pfad === "api/documents") return mail;
   if (pfad === "api/upload" && methode === "POST")
     return { id: "a9", duplicate: false, status: "done", text: "Gelesen und abgelegt." };
+  if (pfad.endsWith("/checked") && methode === "POST") return { text: "Der Brief ist als geprüft abgelegt." };
   if (methode === "POST") return { text: "Die Ablagen werden jetzt abgeholt." };
   return null;
 }

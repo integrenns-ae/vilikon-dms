@@ -147,4 +147,4 @@ def test_court_letter_goes_to_the_owner_and_an_unclear_deadline_is_never_guessed
     assert event["art"] == "court" and event["data"]["owner_only"] is True
     assert "Eine Frist ist nicht eindeutig" in event["text"]
     card = cockpit.get("ki/karten/mail").json()
-    assert card["ton"] == "kritisch" and card["zeilen"][0]["wert"] == "prüfen"
+    assert card["ton"] == "warn" and card["zeilen"][0]["wert"] == "prüfen"

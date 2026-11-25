@@ -131,7 +131,7 @@ The module describes itself in `MODULE.json` and `BRIEFING.md` (no `ki/modul`, n
 |---|---|---|
 | GET | `ki/protokoll?seit=&bis=` | `[{zeit, wer, was}]` |
 | GET | `ki/ereignisse?seit=` | `{"ereignisse": [{id, art, titel, text, time, data}]}`, at most 5 |
-| GET | `ki/karten/mail` | Card: letters to review and due dates of the next 10 days |
+| GET | `ki/karten/mail` | Card: letters to review and due dates of the next 10 days; `warn` for either, `kritisch` only when something is due today |
 | GET | `ki/karten/pages` | Card: pages this month, cap, waiting documents, one line per failing file store |
 | GET | `ki/pages` | `{month, pages, cap, own_key, waiting}` for the operator's pulse |
 | GET | `ki/pruefen` | The check: `{ok, text, sources: [{id, protocol, host, ok, error, last_fetch}], ocr: {ok, operator, pages_used, cap}}`. Lists every store's folder (10 s each); `ok` is false without an OCR key or when a store fails |
@@ -196,7 +196,9 @@ the upload for phone photos; for the owner also the file stores with their error
 `GET /api/documents` feeds it; each row shows a small preview of the original (a PDF's first page drawn with pdf.js,
 loaded on demand, or the photo) that opens large in a dialog, and the row itself opens the original in a new tab
 (`GET /api/documents/{id}/file`, confidential ones only for the
-owner).
+owner). A letter on `review` has the button "Checked" (`POST /api/documents/{id}/checked`, body `{"due": "YYYY-MM-DD"}`
+or `{}`): it goes to `done` and its reason is cleared; a date the person read in the letter is added as a due date
+(kind `court`/`attorney` for such letters, else `other`). Nothing is announced to the cockpit for it.
 
 The page is the core's Vilikon app template (`oberflaeche/`, React + Vite + Tailwind, variant „statisch“): the cockpit's
 colours (`src/index.css`, the owner's signal colour live from `/api/kit/farben.css`), its type and its building blocks

@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+## 0.5.0
+
 - Ein Brief unter „Zu prüfen“ hat jetzt den Knopf „Geprüft“: Hast du im Brief nachgesehen, wird er damit abgelegt
   und verschwindet aus der Liste. Nennt der Brief eine Frist, trägst du ihr Datum dabei ein; sie steht dann bei den
   Fristen.
